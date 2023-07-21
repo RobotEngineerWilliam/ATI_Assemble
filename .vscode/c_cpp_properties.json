@@ -1,0 +1,26 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "${default}",
+                "limitSymbolsToIncludedHeaders": false
+            },
+            "includePath": [
+                "/home/william/Documents/ATI_assemble/devel/include/**",
+                "/opt/ros/melodic/include/**",
+                "/home/william/Documents/ATI_assemble/src/admittance_control/include/**",
+                "/home/william/Documents/ATI_assemble/src/jaka_ros_driver/include/**",
+                "/home/william/Documents/ATI_assemble/src/netft_utils/include/**",
+                "/home/william/Documents/ATI_assemble/src/robot_msgs/include/**",
+                "/usr/include/**"
+            ],
+            "name": "ROS",
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu11",
+            "cppStandard": "c++14",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+        }
+    ],
+    "version": 4
+}
