@@ -8,75 +8,19 @@
 #include <Eigen/Geometry>
 #include <iostream>
 #include "robot_msgs/Move.h"
-#include "admittance_control/reconfigureConfig.h"
-#include "dynamic_reconfigure/server.h"
-#include "dynamic_model.h"
-#include "MDK_computation.h"
+#include "robot_msgs/ServoL.h"
+#include "admittance_control/MDK_msg.h"
+#include "admittance_control/Plot.h"
 
 using namespace std;
 using namespace Eigen;
 
 const double PI = 3.1415926;
 
-#pragma region /* FTsensor calibration */
-Matrix<double, 6, 1> zero_drift_compensation;
-Matrix<double, 6, 1> FTsensor_origin_data;
-Matrix<double, 6, 1> FTsensor_actual_data;
-#pragma endregion
-
-/* Gravity compensation */
-Matrix3d transform_basis2end;
-Matrix<double, 3, 1> G_basis;
-Matrix<double, 3, 1> G_sensor;
-Matrix<double, 3, 1> M_sensor;
-Matrix<double, 3, 1> centroid_sensor;
-Matrix<double, 6, 1> gravity_compensation;
-Matrix<double, 6, 1> external_wrench_sensor;
-Matrix<double, 3, 1> external_force_sensor;
-Matrix<double, 3, 1> external_torque_sensor;
-
-/* Admittance transform*/
-Matrix<double, 3, 1> temp1;
-Matrix<double, 3, 1> temp2;
-Matrix<double, 6, 1> temp3;
-Matrix<double, 6, 4> MDH;
-Matrix<double, 6, 6> M_referance;
-Matrix<double, 60, 1> dynamic_parameter;
-Matrix<double, 6, 6> transform_sensor2end;
-Matrix<double, 6, 1> external_wrench_end;
-Matrix<double, 6, 1> current_pose;
-Matrix<double, 4, 4> homogeneous_transform_current;
-Matrix<double, 6, 1> expected_wrench;
-Matrix<double, 6, 1> origin_expected_pose;
-Matrix<double, 4, 4> homogeneous_transform_expected;
-Matrix<double, 6, 1> origin_expected_joint;
-Matrix<double, 6, 1> delta_wrench;
-Matrix<double, 4, 4> delta_homogeneous_transform;
-Matrix3d delta_rotation;
-Matrix<double, 3, 1> delta_angular;
-Matrix<double, 6, 1> delta_pose;
-Matrix<double, 6, 1> delta_pose_velocity;
-Matrix<double, 6, 1> delta_pose_acceleration;
-Matrix<double, 6, 1> pre_delta_pose;
-MatrixXd M(6, 6);
-MatrixXd D(6, 6);
-MatrixXd K(6, 6);
-Matrix<double, 6, 1> expected_pose;
-double kcontrol_rate = 0.08;
-robot_msgs::Move srv;
-
-Matrix3d SkewSymmetry(Matrix<double, 3, 1> vector)
-{
-    Matrix3d cross_matrix = Matrix3d::Zero();
-    cross_matrix(0, 1) = -vector(2, 0);
-    cross_matrix(0, 2) = vector(1, 0);
-    cross_matrix(1, 0) = vector(2, 0);
-    cross_matrix(1, 2) = -vector(0, 0);
-    cross_matrix(2, 0) = -vector(1, 0);
-    cross_matrix(2, 1) = vector(0, 0);
-
-    return cross_matrix;
-}
+VectorXd FTsensor_data(6);
+Matrix3d rotation_basis2end = Matrix3d::Identity();
+Matrix4d homogeneous_transform_current = Matrix4d::Identity();
+admittance_control::Plot plot_data;
 
 double AngularPI(double angular)
 {
@@ -86,169 +30,175 @@ double AngularPI(double angular)
     return angular;
 }
 
-static MatrixXd R2rpy(const Matrix3d R)
+static Matrix4d Pose2HomogeneousTransform(VectorXd pose)
 {
-    Vector3d n = R.col(0);
-    Vector3d o = R.col(1);
-    Vector3d a = R.col(2);
+    Matrix4d homogeneous_transform = Matrix4d::Identity();
+    Matrix3d rotation_transform;
 
-    Matrix<double, 3, 1> rpy;
-    double y = atan2(n(1), n(0));
-    double p = atan2(-n(2), n(0) * cos(y) + n(1) * sin(y));
-    double r = atan2(a(0) * sin(y) - a(1) * cos(y), -o(0) * sin(y) + o(1) * cos(y));
-    rpy(0, 0) = r;
-    rpy(1, 0) = p;
-    rpy(2, 0) = y;
+    rotation_transform = AngleAxisd(pose(5), Vector3d::UnitZ()) *
+                         AngleAxisd(pose(4), Vector3d::UnitY()) *
+                         AngleAxisd(pose(3), Vector3d::UnitX());
+    homogeneous_transform.block<3, 3>(0, 0) = rotation_transform;
+    homogeneous_transform.block<3, 1>(0, 3) = pose.block<3, 1>(0, 0);
 
-    return rpy;
+    return homogeneous_transform;
 }
 
-void ToolPointRecord(const geometry_msgs::TwistStamped &msg)
+static VectorXd HomogeneousTransform2Pose(Matrix4d homogeneous_transform)
 {
-    current_pose(0, 0) = msg.twist.linear.x;
-    current_pose(1, 0) = msg.twist.linear.y;
-    current_pose(2, 0) = msg.twist.linear.z;
-    current_pose(3, 0) = msg.twist.angular.x;
-    current_pose(4, 0) = msg.twist.angular.y;
-    current_pose(5, 0) = msg.twist.angular.z;
-    transform_basis2end = AngleAxisd(msg.twist.angular.z, Vector3d::UnitZ()) *
-                          AngleAxisd(msg.twist.angular.y, Vector3d::UnitY()) *
-                          AngleAxisd(msg.twist.angular.x, Vector3d::UnitX());
-    homogeneous_transform_current << transform_basis2end(0, 0), transform_basis2end(0, 1), transform_basis2end(0, 2), current_pose(0, 0),
-        transform_basis2end(1, 0), transform_basis2end(1, 1), transform_basis2end(1, 2), current_pose(1, 0),
-        transform_basis2end(2, 0), transform_basis2end(2, 1), transform_basis2end(2, 2), current_pose(2, 0),
-        0, 0, 0, 1;
+    VectorXd pose(6);
+    Matrix3d rotation_transform;
+
+    pose.block<3, 1>(0, 0) = homogeneous_transform.block<3, 1>(0, 3);
+
+    rotation_transform = homogeneous_transform.block<3, 3>(0, 0);
+
+    Vector3d n = rotation_transform.col(0);
+    Vector3d o = rotation_transform.col(1);
+    Vector3d a = rotation_transform.col(2);
+
+    pose(5) = atan2(n(1), n(0));
+    pose(4) = atan2(-n(2), n(0) * cos(pose(5)) + n(1) * sin(pose(5)));
+    pose(3) = atan2(a(0) * sin(pose(5)) - a(1) * cos(pose(5)), -o(0) * sin(pose(5)) + o(1) * cos(pose(5)));
+
+    pose(3) = AngularPI(pose(3));
+    pose(4) = AngularPI(pose(4));
+    pose(5) = AngularPI(pose(5));
+
+    return pose;
 }
 
-void Force2Pose(const geometry_msgs::WrenchStamped::ConstPtr &msg)
+void ToolPointRecord(const geometry_msgs::TwistStamped::ConstPtr &msg)
 {
-    FTsensor_origin_data(0, 0) = msg->wrench.force.x;
-    FTsensor_origin_data(1, 0) = msg->wrench.force.y;
-    FTsensor_origin_data(2, 0) = msg->wrench.force.z;
-    FTsensor_origin_data(3, 0) = msg->wrench.torque.x;
-    FTsensor_origin_data(4, 0) = msg->wrench.torque.y;
-    FTsensor_origin_data(5, 0) = msg->wrench.torque.z;
+    Vector3d current_postion;
 
-    FTsensor_actual_data = FTsensor_origin_data - zero_drift_compensation;
+    current_postion << msg->twist.linear.x, msg->twist.linear.y, msg->twist.linear.z;
+    rotation_basis2end = AngleAxisd(msg->twist.angular.z, Vector3d::UnitZ()) *
+                         AngleAxisd(msg->twist.angular.y, Vector3d::UnitY()) *
+                         AngleAxisd(msg->twist.angular.x, Vector3d::UnitX());
+    homogeneous_transform_current = Matrix4d::Identity();
+    homogeneous_transform_current.block<3, 3>(0, 0) = rotation_basis2end;
+    homogeneous_transform_current.block<3, 1>(0, 3) = current_postion;
+    cout << setw(26) << left << "get tool point:" << current_postion.transpose() << endl;
+    plot_data.data_3 = current_postion(2);
 }
 
-void CallbackFunc(admittance_control::reconfigureConfig &ConfigType_obj, uint32_t level)
+void ForceRecord(const geometry_msgs::WrenchStamped::ConstPtr &msg)
 {
-    M(0, 0) = ConfigType_obj.M_F_x;
-    M(1, 1) = ConfigType_obj.M_F_y;
-    M(2, 2) = ConfigType_obj.M_F_z;
-    M(3, 3) = ConfigType_obj.M_T_x;
-    M(4, 4) = ConfigType_obj.M_T_y;
-    M(5, 5) = ConfigType_obj.M_T_z;
-
-    // D(0, 0) = ConfigType_obj.D_F_x;
-    // D(1, 1) = ConfigType_obj.D_F_y;
-    // D(2, 2) = ConfigType_obj.D_F_z;
-    // D(3, 3) = ConfigType_obj.D_T_x;
-    // D(4, 4) = ConfigType_obj.D_T_y;
-    // D(5, 5) = ConfigType_obj.D_T_z;
-
-    K(0, 0) = ConfigType_obj.K_F_x;
-    K(1, 1) = ConfigType_obj.K_F_y;
-    K(2, 2) = ConfigType_obj.K_F_z;
-    K(3, 3) = ConfigType_obj.K_T_x;
-    K(4, 4) = ConfigType_obj.K_T_y;
-    K(5, 5) = ConfigType_obj.K_T_z;
-
-    MDK MDK_Temp;
-
-    MDK_Temp = MDKComputation(M, K);
-
-    M = MDK_Temp.M_;
-    D = MDK_Temp.D_;
-    K = MDK_Temp.K_;
-
-    // cout << "M^-1:" << M.inverse() << endl;
-    cout << "D修改为:" << D << endl;
-    cout << "K修改为:" << K << endl;
+    FTsensor_data(0) = msg->wrench.force.x;
+    FTsensor_data(1) = msg->wrench.force.y;
+    FTsensor_data(2) = msg->wrench.force.z;
+    FTsensor_data(3) = msg->wrench.torque.x;
+    FTsensor_data(4) = msg->wrench.torque.y;
+    FTsensor_data(5) = msg->wrench.torque.z;
+    cout << setw(26) << left << "get FTsensor data" << FTsensor_data.transpose() << endl;
 }
+
+// void MDKRecord(const admittance_control::MDK_msg::ConstPtr &msg, MatrixXd &M, MatrixXd &D, MatrixXd &K)
+// {
+//     double M_array[36];
+//     double D_array[36];
+//     double K_array[36];
+
+//     memcpy(M_array, &(msg->M[0]), 8 * 36);
+//     memcpy(D_array, &(msg->D[0]), 8 * 36);
+//     memcpy(K_array, &(msg->K[0]), 8 * 36);
+
+//     M = Map<Matrix<double, 6, 6, RowMajor>>(M_array);
+//     D = Map<Matrix<double, 6, 6, RowMajor>>(D_array);
+//     K = Map<Matrix<double, 6, 6, RowMajor>>(K_array);
+// }
 
 int main(int argc, char **argv)
 {
-#pragma region /*基本参数初始化*/
     ros::init(argc, argv, "admittance_control");
-
     ros::NodeHandle n;
 
-    ros::Subscriber FTsensor_sub = n.subscribe("netft_data", 1, Force2Pose);
-    ros::Subscriber servo_line_sub = n.subscribe("/robot_driver/tool_point", 1, ToolPointRecord);
+#pragma region /*基本参数定义*/
+    MatrixXd M(6, 6);
+    MatrixXd D(6, 6);
+    MatrixXd K(6, 6);
+    double kcontrol_rate = 0.1;
 
-    // zero_drift_compensation << -0.345442, -0.916142, -1.68673, -0.0594288, -0.0372112, -0.100919;
-    // centroid_sensor << -0.00158413, -0.0023754, 0.00659773;
-    // G_basis << 0.0, 0.0, -19.6636;
-    zero_drift_compensation << -1.03534, -1.63669, -2.26417, -0.0383264, -0.00889498, -0.102886;
-    centroid_sensor << 0.000226404, -4.35079e-05, 0.00441495;
-    G_basis << 0.0, 0.0, -18.9807;
+    /* FTsensor calibration */
+    VectorXd zero_drift_compensation(6);
+    Vector3d G_basis; // 基坐标系重力
+    Vector3d centroid_sensor;
+    Vector3d G_sensor = Vector3d::Zero(); // 传感器坐标系重力
+    VectorXd gravity_compensation(6);
+    VectorXd external_wrench_sensor(6);
+    Vector3d external_force_sensor = Vector3d::Zero();
+    Vector3d external_torque_sensor = Vector3d::Zero();
+    MatrixXd jacobian_sensor2end(6, 6);
+    VectorXd external_wrench_end(6);
 
-    origin_expected_pose << -0.698439031234, 0.00107985579317, 0.147448071114, -3.1372717645, 0.00903196524481, 0.00885404342115;
-    transform_basis2end = AngleAxisd(origin_expected_pose(5, 0), Vector3d::UnitZ()) *
-                          AngleAxisd(origin_expected_pose(4, 0), Vector3d::UnitY()) *
-                          AngleAxisd(origin_expected_pose(3, 0), Vector3d::UnitX());
-    homogeneous_transform_expected << transform_basis2end(0, 0), transform_basis2end(0, 1), transform_basis2end(0, 2), origin_expected_pose(0, 0),
-        transform_basis2end(1, 0), transform_basis2end(1, 1), transform_basis2end(1, 2), origin_expected_pose(1, 0),
-        transform_basis2end(2, 0), transform_basis2end(2, 1), transform_basis2end(2, 2), origin_expected_pose(2, 0),
-        0, 0, 0, 1;
-    origin_expected_joint << 0.16522547684382893, 2.026115249482023, 1.9502954394352305, 0.7277293271572154, -1.5764709940311654, 1.7271638412619614;
+    /*Admittance computation*/
+    VectorXd expected_wrench(6);
+    VectorXd delta_wrench(6);
+    VectorXd expected_pose(6);
+    Matrix4d expected_homogeneous_transform = Matrix4d::Zero();
+    VectorXd pre_delta_pose(6);
+    Matrix4d pre_homogeneous_transform = Matrix4d::Zero();
+    VectorXd delta_pose(6);
+    Matrix4d delta_homogeneous_transform = Matrix4d::Zero();
+    VectorXd delta_pose_velocity(6);
+    VectorXd delta_pose_acceleration(6);
 
-    expected_wrench << 0, 0, -5, 0, 0, 0;
-    expected_pose << -0.699384694946, 0.0029545274708, 0.16970396014, 3.14058525409, 0.0026023751631, 0.0105711930739;
+    robot_msgs::ServoL servo_msg;
 
-    transform_sensor2end = MatrixXd::Identity(6, 6);
-    transform_sensor2end(3, 1) = -28.6 / 1000.0;
-    transform_sensor2end(4, 0) = 28.6 / 1000.0;
-
-    delta_pose = MatrixXd::Zero(6, 1);
-    delta_pose_velocity = MatrixXd::Zero(6, 1);
-    pre_delta_pose = MatrixXd::Zero(6, 1);
-
-    // a d theta alpha
-    MDH << 0.0, 119.87 / 1000, origin_expected_joint(0, 0), -0.13 / 180 * PI,
-        0.0, 0.0, origin_expected_joint(1, 0), 90.00 / 180 * PI,
-        555.24 / 1000, 0.0, origin_expected_joint(2, 0), 0.28 / 180 * PI,
-        482.28 / 1000, -115.33 / 1000, origin_expected_joint(3, 0), 0.08 / 180 * PI,
-        0.0, 113.23 / 1000, origin_expected_joint(4, 0), 90.01 / 180 * PI,
-        0.0, 107.17 / 1000, origin_expected_joint(5, 0), -89.83 / 180 * PI;
-
-    dynamic_parameter << 0, 0, 0, 0, 0, 9.7748, -3.4619, 0.0707, 0.3706, 0,
-        0.2326, 7.9749, -1.6275, -0.0187, 0.2293, 0, -0.0997, 1.4314, 0.0172, 0.0085,
-        0.0193, 0, 0.0333, 0.0301, 0.0081, 0.0051, 1.0000e-04, 0, -0.0127, 0.0154,
-        0.0040, -1.0000e-03, -3.0000e-04, 0, 0.0026, 0.0066, -0.0295, 1.5549, 0, 0,
-        5.8022, 0.0472, 0, 0, 2.4664, 0.0436, 0, 0, 0.0039, -0.2274,
-        0, 0, 0.0027, 0.0486, 0, 0, 0.0016, 2.0000e-04, 0, 0;
-
-    M_referance = MassMatrixComputation(MDH, dynamic_parameter);
-    cout << M_referance << endl;
-
+    cout.precision(4);
+    // cout.setf(ios::scientific);
 #pragma endregion
 
-#pragma region /*Set the admittance parameter*/
-    for (int i = 0; i < 6; i++)
-    {
-        for (int j = 0; j < 6; j++)
-            M(i, j) = M_referance(i, j);
-    }
-    cout << "M^-1:" << M.inverse() << endl;
-    // M = MatrixXd::Identity(6, 6);
-    // M(0, 0) = 10.0;
-    // M(1, 1) = 10.0;
-    // M(2, 2) = 10.0;
+#pragma region /*基本参数初始化*/
+    ros::Subscriber FTsensor_sub = n.subscribe<geometry_msgs::WrenchStamped>("netft_data", 1, &ForceRecord);
+    ros::Subscriber servo_line_sub = n.subscribe<geometry_msgs::TwistStamped>("/robot_driver/tool_point", 1, &ToolPointRecord);
+    ros::Publisher servo_move_pub = n.advertise<robot_msgs::ServoL>("/robot_driver/servo_move", 1);
+    ros::Publisher plot_pub = n.advertise<admittance_control::Plot>("/plot_data", 100);
+
+    // ros::Subscriber MDK_sub = n.subscribe<admittance_control::MDK_msg>("/MDK", 1, boost::bind(&MDKRecord, _1, M, D, K));
+    // 如何初始化MDK参数即先收到一次topic
+
+    M = MatrixXd::Identity(6, 6);
     D = MatrixXd::Identity(6, 6);
     K = MatrixXd::Identity(6, 6);
 
-    /*动态调参服务*/
-    dynamic_reconfigure::Server<admittance_control::reconfigureConfig> server;
-    dynamic_reconfigure::Server<admittance_control::reconfigureConfig>::CallbackType Callback;
-    Callback = boost::bind(&CallbackFunc, _1, _2);
-    server.setCallback(Callback);
+    double M_array[6] = {20, 20, 25, 50, 50, 50};
+    double K_array[6] = {10, 10, 10, 100, 100, 100};
+
+    for (int i = 0; i < 6; i++)
+    {
+        M(i, i) = M_array[i];
+        K(i, i) = K_array[i];
+        D(i, i) = 2 * sqrt(M_array[i] * K_array[i]);
+    }
+    cout << "M:" << M << endl;
+    cout << "D:" << D << endl;
+    cout << "K:" << K << endl;
+
+    zero_drift_compensation << -1.03534, -1.63669, -2.26417, -0.0383264, -0.00889498, -0.102886;
+    centroid_sensor << 0.000226404, -4.35079e-05, 0.00441495;
+    G_basis << 0.0, 0.0, -18.9807;
+    expected_wrench << 0, 0, -5, 0, 0, 0;
+    expected_pose << -0.699384694946, 0.0029545274708, 0.16970396014, 3.14058525409, 0.0026023751631, 0.0105711930739;
+    FTsensor_data = VectorXd::Zero(6);
+    gravity_compensation = VectorXd::Zero(6);
+    external_wrench_sensor = VectorXd::Zero(6);
+    jacobian_sensor2end = MatrixXd::Identity(6, 6);
+    jacobian_sensor2end(3, 1) = -28.6 / 1000.0;
+    jacobian_sensor2end(4, 0) = 28.6 / 1000.0;
+    external_wrench_end = VectorXd::Zero(6);
+    pre_delta_pose = VectorXd::Zero(6);
+    delta_wrench = VectorXd::Zero(6);
+    delta_pose = VectorXd::Zero(6);
+    delta_pose_velocity = VectorXd::Zero(6);
+    delta_pose_acceleration = VectorXd::Zero(6);
+
 #pragma endregion
 
 #pragma region /*Reach the Start Pose*/
     ros::ServiceClient client = n.serviceClient<robot_msgs::Move>("/robot_driver/move_line");
+    robot_msgs::Move srv;
     ros::ServiceClient client_stop = n.serviceClient<std_srvs::Empty>("/robot_driver/stop_move");
     std_srvs::Empty srv_stop;
 
@@ -256,115 +206,100 @@ int main(int argc, char **argv)
     srv.request.is_block = true;
     srv.request.mvvelo = 0.1;
     srv.request.mvacc = 0.1;
-    srv.request.pose.push_back(expected_pose(0, 0));
-    srv.request.pose.push_back(expected_pose(1, 0));
-    srv.request.pose.push_back(expected_pose(2, 0));
-    srv.request.pose.push_back(expected_pose(3, 0));
-    srv.request.pose.push_back(expected_pose(4, 0));
-    srv.request.pose.push_back(expected_pose(5, 0));
+    for (int i = 0; i < 6; i++)
+        srv.request.pose.push_back(expected_pose(i));
 
     if (client.call(srv))
     {
-        ROS_INFO("Response from server message: %s", srv.response.message.c_str());
-
+        expected_pose << -0.698439031234, 0.00107985579317, 0.2, -3.1372717645, 0.00903196524481, 0.00885404342115;
         srv.request.pose.clear();
         srv.request.is_block = true;
         srv.request.mvvelo = 0.1;
         srv.request.mvacc = 0.1;
-        srv.request.pose.push_back(origin_expected_pose(0, 0));
-        srv.request.pose.push_back(origin_expected_pose(1, 0));
-        srv.request.pose.push_back(origin_expected_pose(2, 0));
-        srv.request.pose.push_back(origin_expected_pose(3, 0));
-        srv.request.pose.push_back(origin_expected_pose(4, 0));
-        srv.request.pose.push_back(origin_expected_pose(5, 0));
+        for (int i = 0; i < 6; i++)
+            srv.request.pose.push_back(expected_pose(i));
+
         if (client.call(srv))
-        {
-            ROS_INFO("Response from server message: %s", srv.response.message.c_str());
             ROS_INFO("Reach the Start Pose");
-        }
         else
         {
-            ROS_ERROR("failed to call /robot_driver/move_line");
+            ROS_ERROR("Failed to Reach the Start Pose 2");
             return 1;
         }
     }
+    else
+    {
+        ROS_ERROR("Failed to Reach the Start Pose 1");
+        return 1;
+    }
+
+    pre_homogeneous_transform = Pose2HomogeneousTransform(expected_pose);
+
+    sleep(1);
+    ros::Rate rate(10);
+    double t = 0;
 #pragma endregion
 
-    while (1)
+    while (ros::ok())
     {
         /*更新外力，末端位置，导纳控制参数*/
-        sleep(1);
         ros::spinOnce();
 
-        // /*Debug*/
-        delta_pose = MatrixXd::Zero(6, 1);
-        delta_pose_velocity = MatrixXd::Zero(6, 1);
-        pre_delta_pose = MatrixXd::Zero(6, 1);
-
-        // delta_rotation << delta_homogeneous_transform.block<3, 3>(0, 0);
-        // delta_angular = R2rpy(delta_rotation);
-        // delta_pose << delta_homogeneous_transform.block<3, 1>(0, 3), delta_angular;
+        /*Debug*/
+        // delta_pose = MatrixXd::Zero(6, 1);
+        // delta_pose_velocity = MatrixXd::Zero(6, 1);
+        // pre_delta_pose = MatrixXd::Zero(6, 1);
 
         /*计算传感器外力*/
-        G_sensor = transform_basis2end.transpose() * G_basis;
-        M_sensor = SkewSymmetry(centroid_sensor) * G_sensor;
-        gravity_compensation << G_sensor, M_sensor;
-        external_wrench_sensor = FTsensor_actual_data - gravity_compensation;
-        cout << "外力：" << external_wrench_sensor(0, 0) << "," << external_wrench_sensor(1, 0) << "," << external_wrench_sensor(2, 0);
-        cout << "外力矩：" << external_wrench_sensor(3, 0) << "," << external_wrench_sensor(4, 0) << "," << external_wrench_sensor(5, 0) << endl;
+        FTsensor_data = FTsensor_data - zero_drift_compensation;
+        G_sensor = rotation_basis2end.transpose() * G_basis;
+        gravity_compensation << G_sensor, centroid_sensor.cross(G_sensor);
+        external_wrench_sensor = FTsensor_data - gravity_compensation;
+        external_wrench_end = jacobian_sensor2end * external_wrench_sensor;
+        delta_wrench = external_wrench_end - expected_wrench;
 
-        /*计算末端位置误差*/
-        delta_homogeneous_transform = homogeneous_transform_current.inverse() * homogeneous_transform_expected;
-        delta_rotation << delta_homogeneous_transform.block<3, 3>(0, 0);
-        delta_angular = R2rpy(delta_rotation);
-        delta_pose << delta_homogeneous_transform.block<3, 1>(0, 3), delta_angular;
-        delta_pose(3, 0) = AngularPI(delta_pose(3, 0));
-        delta_pose(4, 0) = AngularPI(delta_pose(4, 0));
-        delta_pose(5, 0) = AngularPI(delta_pose(5, 0));
+        cout << setw(26) << left << "external_wrench:" << external_wrench_sensor.transpose() << endl;
+        cout << setw(26) << left << "delta_wrench:" << delta_wrench.transpose() << endl;
+
+        /*计算xt,dotxt,dotdotxt*/
+        delta_homogeneous_transform = homogeneous_transform_current.inverse() * pre_homogeneous_transform;
+        delta_pose = -HomogeneousTransform2Pose(delta_homogeneous_transform);
         delta_pose_velocity = (delta_pose - pre_delta_pose) / kcontrol_rate;
+        delta_pose_acceleration = M.inverse() * (delta_wrench - D * delta_pose_velocity - K * delta_pose);
 
-        external_wrench_end = transform_sensor2end * external_wrench_sensor;
-        delta_wrench = expected_wrench - external_wrench_end;
-
-        delta_pose_acceleration = M.inverse() * delta_wrench - M.inverse() * D * delta_pose_velocity - M.inverse() * K * delta_pose;
-        cout << "delta_wrench:" << delta_wrench.transpose() << endl;
-        cout << "delta_pose:" << delta_pose.transpose() << endl;
-        cout << "delta_pose_velocity:" << delta_pose_velocity.transpose() << endl;
-        cout << "delta_pose_acceleration:" << delta_pose_acceleration.transpose() << endl;
-
+        pre_homogeneous_transform = homogeneous_transform_current;
         pre_delta_pose = delta_pose;
 
+        cout << setw(26) << left << "delta_pose:" << delta_pose.transpose() << endl;
+        cout << setw(26) << left << "delta_pose_velocity:" << delta_pose_velocity.transpose() << endl;
+        cout << setw(26) << left << "delta_pose_acceleration:" << delta_pose_acceleration.transpose() << endl;
+
+        /*计算xt+1,期望位姿*/
         delta_pose = delta_pose + delta_pose_velocity * kcontrol_rate + delta_pose_acceleration * kcontrol_rate * kcontrol_rate;
+        delta_homogeneous_transform = Pose2HomogeneousTransform(delta_pose);
+        expected_homogeneous_transform = homogeneous_transform_current * delta_homogeneous_transform;
+        expected_pose = HomogeneousTransform2Pose(expected_homogeneous_transform);
 
-        transform_basis2end = AngleAxisd(delta_pose(5, 0), Vector3d::UnitZ()) *
-                              AngleAxisd(delta_pose(4, 0), Vector3d::UnitY()) *
-                              AngleAxisd(delta_pose(3, 0), Vector3d::UnitX());
-        delta_homogeneous_transform << transform_basis2end(0, 0), transform_basis2end(0, 1), transform_basis2end(0, 2), delta_pose(0, 0),
-            transform_basis2end(1, 0), transform_basis2end(1, 1), transform_basis2end(1, 2), delta_pose(1, 0),
-            transform_basis2end(2, 0), transform_basis2end(2, 1), transform_basis2end(2, 2), delta_pose(2, 0),
-            0, 0, 0, 1;
-        delta_homogeneous_transform = homogeneous_transform_expected * delta_homogeneous_transform.inverse();
-        delta_rotation << delta_homogeneous_transform.block<3, 3>(0, 0);
-        delta_angular = R2rpy(delta_rotation);
-        expected_pose << delta_homogeneous_transform.block<3, 1>(0, 3), delta_angular;
+        expected_pose << -0.698439031234, 0.00107985579317, 0.147448071114, -3.1372717645, 0.00903196524481, 0.00885404342115;
 
-        expected_pose(3, 0) = AngularPI(expected_pose(3, 0));
-        expected_pose(4, 0) = AngularPI(expected_pose(4, 0));
-        expected_pose(5, 0) = AngularPI(expected_pose(5, 0));
+        expected_pose(2) = 0.2 + sin(0.1 * t) * 0.05;
+        t = t + 0.1;
 
-        temp3 = delta_pose - pre_delta_pose;
-        cout << "本次步进量：" << temp3.transpose() << endl;
-        cout << "delta_pose:" << delta_pose.transpose() << endl;
-        cout << "本次期望位置：" << expected_pose.transpose() << endl;
+        cout << setw(26) << left << "本次步进量：" << delta_pose.transpose() << endl;
+        cout << setw(26) << left << "本次期望位置：" << expected_pose.transpose() << endl;
+        plot_data.data_1 = expected_pose(2);
+        // plot_data.data_2 = external_wrench_end(2);
+        plot_pub.publish(plot_data);
 
-        external_force_sensor << external_wrench_sensor(0, 0), external_wrench_sensor(1, 0), external_wrench_sensor(2, 0);
-        external_torque_sensor << external_wrench_sensor(3, 0), external_wrench_sensor(4, 0), external_wrench_sensor(5, 0);
-        temp1 = external_force_sensor.array().abs();
-        temp2 = external_torque_sensor.array().abs();
+        // /*接触力和位置限制*/
+        // external_force_sensor = external_wrench_sensor.block<3, 1>(0, 0);
+        // external_torque_sensor = external_wrench_sensor.block<3, 1>(3, 0);
+        // external_force_sensor = external_force_sensor.array().abs();
+        // external_torque_sensor = external_torque_sensor.array().abs();
 
-        // if (temp1.maxCoeff() > 50.0 || temp2.maxCoeff() > 5.0 ||
-        //     abs(delta_pose(0, 0)) > 0.008 || abs(delta_pose(1, 0)) > 0.010 || abs(delta_pose(2, 0)) > 0.030 ||
-        //     abs(delta_pose(3, 0)) > 5.0 / 180 * PI || abs(delta_pose(4, 0)) > 5.0 / 180 * PI || abs(delta_pose(5, 0)) > 3.0 / 180 * PI)
+        // if (external_force_sensor.maxCoeff() > 100.0 || external_torque_sensor.maxCoeff() > 5.0 ||
+        //     abs(expected_pose(0) + 0.698439031234) > 0.008 || abs(expected_pose(1) - 0.00107985579317) > 0.010 || abs(expected_pose(2) - 0.147448071114) > 0.040 ||
+        //     abs(expected_pose(3) + PI) > 5.0 / 180 * PI || abs(expected_pose(4)) > 5.0 / 180 * PI || abs(expected_pose(5)) > 3.0 / 180 * PI)
         // {
         //     if (client_stop.call(srv_stop))
         //     {
@@ -380,26 +315,43 @@ int main(int argc, char **argv)
 
         // srv.request.pose.clear();
         // srv.request.is_block = false;
-        // srv.request.mvvelo = 0.1;
+        // srv.request.mvvelo = 50;
         // srv.request.mvacc = 0.1;
-        // srv.request.pose.push_back(expected_pose(0, 0));
-        // srv.request.pose.push_back(expected_pose(1, 0));
-        // srv.request.pose.push_back(expected_pose(2, 0));
-        // srv.request.pose.push_back(expected_pose(3, 0));
-        // srv.request.pose.push_back(expected_pose(4, 0));
-        // srv.request.pose.push_back(expected_pose(5, 0));
+        // for (int i = 0; i < 6; i++)
+        //     srv.request.pose.push_back(expected_pose(i));
 
         // if (client.call(srv))
-        // {
         //     ROS_INFO("Response from server message: %s", srv.response.message.c_str());
-        // }
         // else
         // {
         //     ROS_ERROR("failed to call /robot_driver/move_line");
         //     return 1;
         // }
-        // sleep(kcontrol_rate);
+        servo_msg.servo_mode = true;
+        // memcpy(servo_msg.pose, expected_pose.data(), 6 * 8);
+        for (int i = 0; i < 6; i++)
+            servo_msg.pose[i] = expected_pose(i);
+        servo_move_pub.publish(servo_msg);
+
+        rate.sleep();
     }
 
     return 0;
 }
+
+// static MatrixXd R2rpy(const Matrix3d R)
+// {
+//     Vector3d n = R.col(0);
+//     Vector3d o = R.col(1);
+//     Vector3d a = R.col(2);
+
+//     Matrix<double, 3, 1> rpy;
+//     double y = atan2(n(1), n(0));
+//     double p = atan2(-n(2), n(0) * cos(y) + n(1) * sin(y));
+//     double r = atan2(a(0) * sin(y) - a(1) * cos(y), -o(0) * sin(y) + o(1) * cos(y));
+//     rpy(0, 0) = r;
+//     rpy(1, 0) = p;
+//     rpy(2, 0) = y;
+
+//     return rpy;
+// }

@@ -8,10 +8,10 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/devel/lib/admittance_control/admittance_control",
+            "program": "${workspaceFolder}/devel/lib/jaka_ros_driver/connect_robot",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${fileDirname}",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -27,11 +27,6 @@
                     "ignoreFailures": true
                 }
             ]
-        },
-        {
-            "name": "ROS: Attach",
-            "request": "attach",
-            "type": "ros"
         }
     ]
 }

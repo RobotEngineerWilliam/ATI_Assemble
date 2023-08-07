@@ -131,7 +131,7 @@ catkin_package(
 include_directories(
    include
    ${catkin_INCLUDE_DIRS}
-   src/libs
+   include/libs
    src
 )
 
@@ -225,82 +225,84 @@ include_directories(
 # catkin_add_nosetests(test)
 
 #add_executable(publish_joint_states src/publish_joint_states.cpp)
-#target_link_libraries(publish_joint_states ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
-#target_link_libraries(publish_joint_states ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libz.a)
-#target_link_libraries(publish_joint_states ${PROJECT_NAME} ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+#target_link_libraries(publish_joint_states ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
+#target_link_libraries(publish_joint_states ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libz.a)
+#target_link_libraries(publish_joint_states ${PROJECT_NAME} ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 
 # add_executable(move_joint_client src/move_joint_client.cpp)
-# target_link_libraries(move_joint_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(move_joint_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(move_joint_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(move_line_client src/move_line_client.cpp)
-# target_link_libraries(move_line_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(move_line_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(move_line_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(stop_move_client src/stop_move_client.cpp)
-# target_link_libraries(stop_move_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(stop_move_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(stop_move_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(enable_servo_client src/enable_servo_client.cpp)
-# target_link_libraries(enable_servo_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(enable_servo_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(enable_servo_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(enable_teach_drag src/enable_teach_drag.cpp)
-# target_link_libraries(enable_teach_drag ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(enable_teach_drag ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(enable_teach_drag ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(subscriber_servo_line src/subscriber_servo_line.cpp)
-# target_link_libraries(subscriber_servo_line ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(subscriber_servo_line ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(subscriber_servo_line ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(set_user_frame_client src/set_user_frame_client.cpp)
-# target_link_libraries(set_user_frame_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(set_user_frame_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(set_user_frame_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(set_tcp_client src/set_tcp_client.cpp)
-# target_link_libraries(set_tcp_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(set_tcp_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(set_tcp_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(set_payload_client src/set_payload_client.cpp)
-# target_link_libraries(set_payload_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(set_payload_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(set_payload_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(clear_error_client src/clear_error_client.cpp)
-# target_link_libraries(clear_error_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(clear_error_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(clear_error_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(set_collision_client src/set_collision_client.cpp)
-# target_link_libraries(set_collision_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(set_collision_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(set_collision_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(subscriber_tool_point src/subscriber_tool_point.cpp)
-# target_link_libraries(subscriber_tool_point ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(subscriber_tool_point ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(subscriber_tool_point ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(subscriber_joint_states src/subscriber_joint_states.cpp)
-# target_link_libraries(subscriber_joint_states ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(subscriber_joint_states ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(subscriber_joint_states ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(subscriber_robot_state src/subscriber_robot_state.cpp)
-# target_link_libraries(subscriber_robot_state ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(subscriber_robot_state ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(subscriber_robot_state ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(move_jog_client src/move_jog_client.cpp)
-# target_link_libraries(move_jog_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(move_jog_client ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(move_jog_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 # add_executable(disconnect_robot src/disconnect_robot.cpp)
-# target_link_libraries(disconnect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+# target_link_libraries(disconnect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 # add_dependencies(disconnect_robot ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_executable(connect_robot src/connect_robot.cpp)
-target_link_libraries(connect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
+target_link_libraries(connect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 add_dependencies(connect_robot ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(robot_client src/robot_client.cpp)
-target_link_libraries(robot_client  ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
-add_dependencies(robot_client  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_executable(robot_move_server src/robot_move_server.cpp)
+target_link_libraries(robot_move_server  ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
+add_dependencies(robot_move_server  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(robot_sub src/robot_sub.cpp)
-target_link_libraries(robot_sub ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/src/libs/libjakaAPI.so)
-add_dependencies(robot_sub ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_executable(robot_setting_server src/robot_setting_server.cpp)
+target_link_libraries(robot_setting_server  ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
+add_dependencies(robot_setting_server  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+add_definitions("-Wall -g") 

@@ -80,7 +80,6 @@ MatrixXd MassMatrixComputation(MatrixXd MDH, MatrixXd dynamic_parameter)
                 homogeneous_transform(k, j) = homogeneous_transform(k, j) * homogeneous_transform_element;
         }
     }
-    cout << homogeneous_transform(5, 0) << endl;
 
     for (int i = 0; i < 6; i++)
     {

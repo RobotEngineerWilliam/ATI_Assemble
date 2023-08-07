@@ -10,6 +10,7 @@ project(admittance_control)
 find_package(catkin REQUIRED COMPONENTS
   jaka_ros_driver
   dynamic_reconfigure
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -46,11 +47,11 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  MDK_msg.msg
+  Plot.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -67,10 +68,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -103,7 +104,7 @@ generate_dynamic_reconfigure_options(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES admittance_control
-#  CATKIN_DEPENDS 
+  CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
 
@@ -135,17 +136,6 @@ target_link_libraries(Dynamic_Comput
   ${catkin_LIBRARIES}
 )
 
-add_library(MDK_Comput
-  include/MDK_computation.h
-  src/MDK_computation.cpp
-)
-
-add_dependencies(MDK_Comput ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-target_link_libraries(MDK_Comput
-  ${catkin_LIBRARIES}
-)
-
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
@@ -163,21 +153,21 @@ target_link_libraries(MDK_Comput
 
 ## Specify libraries to link a library or executable target against
 
-add_executable(admittance_control src/admittance_control.cpp)
-add_dependencies(admittance_control ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_executable(MDK_computation src/MDK_computation.cpp)
+add_dependencies(MDK_computation ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(admittance_control
+target_link_libraries(MDK_computation
   Dynamic_Comput
   ${catkin_LIBRARIES}
 )
 
-target_link_libraries(admittance_control
-  MDK_Comput
-  ${catkin_LIBRARIES}
-)
+add_executable(admittance_control src/admittance_control.cpp)
+target_link_libraries(admittance_control ${catkin_LIBRARIES})
 
 add_executable(gravity_calibration src/gravity_calibration.cpp)
 target_link_libraries(gravity_calibration ${catkin_LIBRARIES})
+
+add_definitions("-Wall -g") 
 
 #############
 ## Install ##

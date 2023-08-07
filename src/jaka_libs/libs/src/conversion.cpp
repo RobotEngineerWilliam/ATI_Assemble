@@ -1,11 +1,4 @@
-#include "Eigen/Dense"
-#include "Eigen/Core"
-#include "Eigen/Geometry"
-#include "Eigen/StdVector"
-#include "cmath"
-#include "iostream"
-
-#include "libs/robot.h"
+#include "../conversion.h"
 
 RotMatrix Angaxis2Rot(Eigen::Vector3d &agax3){
     Eigen::Vector3d rvec;
@@ -52,4 +45,5 @@ Eigen::Vector3d Rot2Angaxis(RotMatrix &r){
     
     return v;
 }
+
 

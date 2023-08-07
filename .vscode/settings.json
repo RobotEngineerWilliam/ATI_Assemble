@@ -77,7 +77,8 @@
         "string_view": "cpp",
         "core": "cpp",
         "geometry": "cpp",
-        "matrixfunctions": "cpp"
+        "matrixfunctions": "cpp",
+        "*.ipp": "cpp"
     },
     "[python]": {
         "editor.defaultFormatter": "ms-python.autopep8"

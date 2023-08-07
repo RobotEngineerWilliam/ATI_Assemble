@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="jaka_ros_driver" type="connect_robot" name="connect_robot" output="screen" />
+    <node name="netft_node" pkg="netft_utils" type="netft_node" respawn="false" output="screen" args="192.168.50.168"/>
+    <node pkg="admittance_control" type="MDK_computation" name="MDK_computation" output="screen" />
+</launch>
