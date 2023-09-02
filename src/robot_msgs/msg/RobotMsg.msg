@@ -20,5 +20,4 @@ int16 motor_sync
 # servo_enable: get servo status, 1 for servo control enabled, 0 for servo disabled
 int16 servo_enable
 
-
 int16 collision_state

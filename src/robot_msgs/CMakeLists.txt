@@ -66,6 +66,7 @@ add_message_files(
    ClearErr.srv
    SetCollision.srv
    SetAxis.srv
+   GetPosition.srv
  )
 
 ## Generate actions in the 'action' folder

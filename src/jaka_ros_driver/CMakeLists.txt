@@ -297,12 +297,4 @@ add_executable(connect_robot src/connect_robot.cpp)
 target_link_libraries(connect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
 add_dependencies(connect_robot ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(robot_move_server src/robot_move_server.cpp)
-target_link_libraries(robot_move_server  ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
-add_dependencies(robot_move_server  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-add_executable(robot_setting_server src/robot_setting_server.cpp)
-target_link_libraries(robot_setting_server  ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
-add_dependencies(robot_setting_server  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
 add_definitions("-Wall -g") 

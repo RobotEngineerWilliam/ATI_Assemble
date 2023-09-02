@@ -78,7 +78,15 @@
         "core": "cpp",
         "geometry": "cpp",
         "matrixfunctions": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "cholesky": "cpp",
+        "eigenvalues": "cpp",
+        "householder": "cpp",
+        "jacobi": "cpp",
+        "lu": "cpp",
+        "qr": "cpp",
+        "svd": "cpp",
+        "stdvector": "cpp"
     },
     "[python]": {
         "editor.defaultFormatter": "ms-python.autopep8"

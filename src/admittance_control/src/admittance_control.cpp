@@ -181,6 +181,7 @@ int main(int argc, char **argv)
     G_basis << 0.0, 0.0, -18.9807;
     expected_wrench << 0, 0, -5, 0, 0, 0;
     expected_pose << -0.699384694946, 0.0029545274708, 0.16970396014, 3.14058525409, 0.0026023751631, 0.0105711930739;
+    expected_pose << -0.699384694946, 0.0029545274708, 0.2, 3.14058525409, 0.0026023751631, 0.0105711930739;
     FTsensor_data = VectorXd::Zero(6);
     gravity_compensation = VectorXd::Zero(6);
     external_wrench_sensor = VectorXd::Zero(6);
@@ -236,7 +237,7 @@ int main(int argc, char **argv)
     pre_homogeneous_transform = Pose2HomogeneousTransform(expected_pose);
 
     sleep(1);
-    ros::Rate rate(10);
+    ros::Rate rate(50);
     double t = 0;
 #pragma endregion
 
@@ -250,39 +251,39 @@ int main(int argc, char **argv)
         // delta_pose_velocity = MatrixXd::Zero(6, 1);
         // pre_delta_pose = MatrixXd::Zero(6, 1);
 
-        /*计算传感器外力*/
-        FTsensor_data = FTsensor_data - zero_drift_compensation;
-        G_sensor = rotation_basis2end.transpose() * G_basis;
-        gravity_compensation << G_sensor, centroid_sensor.cross(G_sensor);
-        external_wrench_sensor = FTsensor_data - gravity_compensation;
-        external_wrench_end = jacobian_sensor2end * external_wrench_sensor;
-        delta_wrench = external_wrench_end - expected_wrench;
+        // /*计算传感器外力*/
+        // FTsensor_data = FTsensor_data - zero_drift_compensation;
+        // G_sensor = rotation_basis2end.transpose() * G_basis;
+        // gravity_compensation << G_sensor, centroid_sensor.cross(G_sensor);
+        // external_wrench_sensor = FTsensor_data - gravity_compensation;
+        // external_wrench_end = jacobian_sensor2end * external_wrench_sensor;
+        // delta_wrench = external_wrench_end - expected_wrench;
 
-        cout << setw(26) << left << "external_wrench:" << external_wrench_sensor.transpose() << endl;
-        cout << setw(26) << left << "delta_wrench:" << delta_wrench.transpose() << endl;
+        // cout << setw(26) << left << "external_wrench:" << external_wrench_sensor.transpose() << endl;
+        // cout << setw(26) << left << "delta_wrench:" << delta_wrench.transpose() << endl;
 
-        /*计算xt,dotxt,dotdotxt*/
-        delta_homogeneous_transform = homogeneous_transform_current.inverse() * pre_homogeneous_transform;
-        delta_pose = -HomogeneousTransform2Pose(delta_homogeneous_transform);
-        delta_pose_velocity = (delta_pose - pre_delta_pose) / kcontrol_rate;
-        delta_pose_acceleration = M.inverse() * (delta_wrench - D * delta_pose_velocity - K * delta_pose);
+        // /*计算xt,dotxt,dotdotxt*/
+        // delta_homogeneous_transform = homogeneous_transform_current.inverse() * pre_homogeneous_transform;
+        // delta_pose = -HomogeneousTransform2Pose(delta_homogeneous_transform);
+        // delta_pose_velocity = (delta_pose - pre_delta_pose) / kcontrol_rate;
+        // delta_pose_acceleration = M.inverse() * (delta_wrench - D * delta_pose_velocity - K * delta_pose);
 
-        pre_homogeneous_transform = homogeneous_transform_current;
-        pre_delta_pose = delta_pose;
+        // pre_homogeneous_transform = homogeneous_transform_current;
+        // pre_delta_pose = delta_pose;
 
-        cout << setw(26) << left << "delta_pose:" << delta_pose.transpose() << endl;
-        cout << setw(26) << left << "delta_pose_velocity:" << delta_pose_velocity.transpose() << endl;
-        cout << setw(26) << left << "delta_pose_acceleration:" << delta_pose_acceleration.transpose() << endl;
+        // cout << setw(26) << left << "delta_pose:" << delta_pose.transpose() << endl;
+        // cout << setw(26) << left << "delta_pose_velocity:" << delta_pose_velocity.transpose() << endl;
+        // cout << setw(26) << left << "delta_pose_acceleration:" << delta_pose_acceleration.transpose() << endl;
 
-        /*计算xt+1,期望位姿*/
-        delta_pose = delta_pose + delta_pose_velocity * kcontrol_rate + delta_pose_acceleration * kcontrol_rate * kcontrol_rate;
-        delta_homogeneous_transform = Pose2HomogeneousTransform(delta_pose);
-        expected_homogeneous_transform = homogeneous_transform_current * delta_homogeneous_transform;
-        expected_pose = HomogeneousTransform2Pose(expected_homogeneous_transform);
+        // /*计算xt+1,期望位姿*/
+        // delta_pose = delta_pose + delta_pose_velocity * kcontrol_rate + delta_pose_acceleration * kcontrol_rate * kcontrol_rate;
+        // delta_homogeneous_transform = Pose2HomogeneousTransform(delta_pose);
+        // expected_homogeneous_transform = homogeneous_transform_current * delta_homogeneous_transform;
+        // expected_pose = HomogeneousTransform2Pose(expected_homogeneous_transform);
 
         expected_pose << -0.698439031234, 0.00107985579317, 0.147448071114, -3.1372717645, 0.00903196524481, 0.00885404342115;
 
-        expected_pose(2) = 0.2 + sin(0.1 * t) * 0.05;
+        expected_pose(2) = 0.2 + sin(0.01 * t) * 0.05;
         t = t + 0.1;
 
         cout << setw(26) << left << "本次步进量：" << delta_pose.transpose() << endl;
@@ -338,20 +339,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
-// static MatrixXd R2rpy(const Matrix3d R)
-// {
-//     Vector3d n = R.col(0);
-//     Vector3d o = R.col(1);
-//     Vector3d a = R.col(2);
-
-//     Matrix<double, 3, 1> rpy;
-//     double y = atan2(n(1), n(0));
-//     double p = atan2(-n(2), n(0) * cos(y) + n(1) * sin(y));
-//     double r = atan2(a(0) * sin(y) - a(1) * cos(y), -o(0) * sin(y) + o(1) * cos(y));
-//     rpy(0, 0) = r;
-//     rpy(1, 0) = p;
-//     rpy(2, 0) = y;
-
-//     return rpy;
-// }

@@ -1,8 +1,0 @@
-int16 type #1-关节空间 2-笛卡尔空间 3-circular_move 4-伺服模式笛卡尔空间 5-伺服模式关节空间 10-笛卡尔空间planning
-float32[] pose
-float32 mvvelo
-float32 mvacc
-float32[] force_limit
----
-int16 ret
-string message
