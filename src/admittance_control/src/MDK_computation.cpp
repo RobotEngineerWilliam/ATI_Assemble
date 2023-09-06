@@ -75,8 +75,8 @@ void CallbackFunc(admittance_control::reconfigureConfig &ConfigType_obj, uint32_
         break;
     }
 
-    D = M * K;
-    D = 2 * D.sqrt();
+    // D = M * K;
+    // D = 2 * D.sqrt();
 
     memcpy(&(MDK.M), M.data(), 8 * 36);
     memcpy(&(MDK.D), D.data(), 8 * 36);
@@ -127,10 +127,25 @@ int main(int argc, char **argv)
         5.8022, 0.0472, 0, 0, 2.4664, 0.0436, 0, 0, 0.0039, -0.2274,
         0, 0, 0.0027, 0.0486, 0, 0, 0.0016, 2.0000e-04, 0, 0;
 
-    M = MassMatrixComputation(MDH, dynamic_parameter);
+    // M = MassMatrixComputation(MDH, dynamic_parameter);
+    M = MatrixXd::Identity(6, 6);
+    D = MatrixXd::Identity(6, 6);
     K = MatrixXd::Identity(6, 6);
-    D = M * K;
-    D = 2 * D.sqrt();
+
+    double M_array[6] = {100, 100, 150, 1, 1, 20};
+    double D_array[6] = {500, 500, 500, 20, 20, 50};
+    double K_array[6] = {80, 100, 200, 10, 10, 50};
+
+    for (int i = 0; i < 6; i++)
+    {
+        M(i, i) = M_array[i];
+        K(i, i) = K_array[i];
+        // D(i, i) = 2 * sqrt(M_array[i] * K_array[i]);
+        D(i, i) = D_array[i];
+    }
+
+    // D = M * K;
+    // D = 2 * D.sqrt();
 
     memcpy(&(MDK.M), M.data(), 8 * 36);
     memcpy(&(MDK.D), D.data(), 8 * 36);

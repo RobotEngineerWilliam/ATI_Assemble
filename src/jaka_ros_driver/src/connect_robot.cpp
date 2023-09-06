@@ -373,6 +373,8 @@ void ServoMovePoseAccepted(const robot_msgs::ServoL::ConstPtr &msg)
     }
     else if (servo_mode_open_flag && !msg->servo_mode)
     {
+        servo_mode_open_flag = false;
+
         pthread_mutex_lock(&mutex);
 
         int tmp = robot.servo_move_enable(false);
@@ -382,8 +384,6 @@ void ServoMovePoseAccepted(const robot_msgs::ServoL::ConstPtr &msg)
         std::cout << "Servo disable!" << tmp << std::endl;
 
         sleep(1);
-
-        servo_mode_open_flag = false;
     }
 
     cout << "expected pose:" << expected_pose_servo.transpose() << endl;
@@ -1014,6 +1014,12 @@ void *RobotStatePublish(void *args)
 
         pthread_mutex_unlock(&mutex);
 
+        if (!robot_status.is_socket_connect)
+        {
+            ROS_ERROR("connect error!!!");
+            continue;
+        }
+
         tool_point.twist.linear.x = robot_status.cartesiantran_position[0] / 1000;
         tool_point.twist.linear.y = robot_status.cartesiantran_position[1] / 1000;
         tool_point.twist.linear.z = robot_status.cartesiantran_position[2] / 1000;
@@ -1037,8 +1043,6 @@ void *RobotStatePublish(void *args)
         plot_data.data_2 = tool_point.twist.linear.z;
         plot_data.data_4 = robot_status.joint_position[1];
         plot_data.data_5 = robot_status.joint_position[2];
-
-        cout << "current_tool_point:" << tool_point.twist.linear.z << endl;
 
         rate.sleep();
 
@@ -1173,7 +1177,7 @@ void *ServoMove(void *args)
     // 1.5 service servo move -
     ros::Subscriber servo_move_sub = n_servo.subscribe("/robot_driver/servo_move", 1, &ServoMovePoseAccepted);
 
-    while (true)
+    while (ros::ok())
     {
         servo_queue.callOne(ros::WallDuration(1.0));
         if (servo_mode_open_flag && servo_pose_change_flag)
@@ -1200,7 +1204,7 @@ void *ServoMove(void *args)
 
             memcpy(expected_joint_servo.data(), tmp_expected_joint_servo.jVal, 6 * 8);
 
-            Average_Series(current_joint_servo, expected_joint_servo, 0.01, tra);
+            Average_Series(current_joint_servo, expected_joint_servo, 0.1, tra);
 
             // Trapezoid_Velocity_Series(expected_joint_servo, tra, vel_lim, acc_lim, start_vel, end_vel);
 
@@ -1225,7 +1229,7 @@ void *ServoMove(void *args)
 
                     memcpy(expected_joint_servo.data(), tmp_expected_joint_servo.jVal, 6 * 8);
 
-                    Average_Series(current_joint_servo, expected_joint_servo, 0.01, tra);
+                    Average_Series(current_joint_servo, expected_joint_servo, 0.1, tra);
 
                     // Trapezoid_Velocity_Series(expected_joint_servo, tra, vel_lim, acc_lim, start_vel, end_vel);
 
@@ -1262,31 +1266,6 @@ void *ServoMove(void *args)
             }
             usleep(8 * 1000);
         }
-    }
-}
-
-/* 多线程监控网络状态 */
-void *get_conn_scoket_state(void *args)
-{
-    int get_count = 0;
-    RobotStatus robot_status;
-    int is_socket_connect;
-    while (ros::ok())
-    {
-        /* code */
-        int ret = robot.get_robot_status(&robot_status);
-
-        // cout<<"ret:"<<ret<<endl;
-        is_socket_connect = robot_status.is_socket_connect;
-        // cout<<"postition:"<<robot_status.joint_position[0]<<endl;
-        // cout<<"is_socket_connect:"<<is_socket_connect<<endl;
-        if (!is_socket_connect)
-        {
-            ROS_ERROR("connect error!!!");
-        }
-        // cout<<"get_count:"<<get_count++<<endl;
-
-        sleep(1);
     }
 }
 
@@ -1362,17 +1341,8 @@ int main(int argc, char **argv)
     ros::Duration(1).sleep();
     ROS_INFO("Robot:%s ready!", ip.c_str());
 
-    // 监控状态
-    pthread_t conn_state_thread;
-    int ret = pthread_create(&conn_state_thread, NULL, get_conn_scoket_state, NULL);
-
-    if (ret != 0)
-    {
-        ROS_ERROR("thread creat error!!!!!!!!!!");
-    }
-
-    pthread_t tids_1;
-    pthread_create(&tids_1, NULL, PlotData, &n);
+    // pthread_t tids_1;
+    // pthread_create(&tids_1, NULL, PlotData, &n);
 
     pthread_t tids_2;
     pthread_create(&tids_2, NULL, RobotStatePublish, &n);
@@ -1380,12 +1350,19 @@ int main(int argc, char **argv)
     pthread_t tids_3;
     pthread_create(&tids_3, NULL, ServoMove, &n);
 
-    // ros::MultiThreadedSpinner s(4);
+    // ros::MultiThreadedSpinner s(4);S
     ros::spin();
 
-    pthread_mutex_destroy(&mutex);
+    // pthread_join(tids_1, NULL);
+    pthread_join(tids_2, NULL);
+    pthread_join(tids_3, NULL);
     std::cout << "shut down" << std::endl;
-    robot.login_out();
 
+    pthread_mutex_lock(&mutex);
+    int ret = robot.login_out();
+    cout << ret << endl;
+    pthread_mutex_unlock(&mutex);
+
+    pthread_mutex_destroy(&mutex);
     return 0;
 }

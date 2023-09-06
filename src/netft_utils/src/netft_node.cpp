@@ -32,7 +32,7 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-/** 
+/**
  * Simple stand-alone ROS node that takes data from NetFT sensor and
  * Publishes it ROS topic
  */
@@ -51,9 +51,8 @@
 namespace po = boost::program_options;
 using namespace std;
 
-
 int main(int argc, char **argv)
-{ 
+{
   ros::init(argc, argv, "netft_node");
   ros::NodeHandle nh;
 
@@ -61,15 +60,10 @@ int main(int argc, char **argv)
   string address;
 
   po::options_description desc("Options");
-  desc.add_options()
-    ("help", "display help")
-    ("rate", po::value<float>(&pub_rate_hz)->default_value(500.0), "set publish rate (in hertz)")
-    ("wrench", "publish older Wrench message type instead of WrenchStamped")
-    ("address", po::value<string>(&address), "IP address of NetFT box")
-    ;
-     
+  desc.add_options()("help", "display help")("rate", po::value<float>(&pub_rate_hz)->default_value(500.0), "set publish rate (in hertz)")("wrench", "publish older Wrench message type instead of WrenchStamped")("address", po::value<string>(&address), "IP address of NetFT box");
+
   po::positional_options_description p;
-  p.add("address",  1);
+  p.add("address", 1);
 
   po::variables_map vm;
   po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
@@ -78,9 +72,9 @@ int main(int argc, char **argv)
   if (vm.count("help"))
   {
     cout << desc << endl;
-    //usage(progname);
+    // usage(progname);
     exit(EXIT_SUCCESS);
-  }      
+  }
 
   if (!vm.count("address"))
   {
@@ -106,18 +100,18 @@ int main(int argc, char **argv)
     is_ready.data = true;
     ready_pub.publish(is_ready);
   }
-  catch(std::runtime_error)
+  catch (std::runtime_error)
   {
     is_ready.data = false;
     ready_pub.publish(is_ready);
   }
-  
+
   ros::Publisher pub;
   if (publish_wrench)
   {
     pub = nh.advertise<geometry_msgs::Wrench>("netft_data", 100);
   }
-  else 
+  else
   {
     pub = nh.advertise<geometry_msgs::WrenchStamped>("netft_data", 100);
   }
@@ -136,19 +130,19 @@ int main(int argc, char **argv)
     if (netft->waitForNewData())
     {
       netft->getData(data);
-      if (publish_wrench) 
+      if (publish_wrench)
       {
-        //geometry_msgs::Wrench(data.wrench);
+        // geometry_msgs::Wrench(data.wrench);
         pub.publish(data.wrench);
       }
-      else 
+      else
       {
         pub.publish(data);
       }
     }
-    
+
     ros::Time current_time(ros::Time::now());
-    if ( (current_time - last_diag_pub_time) > diag_pub_duration )
+    if ((current_time - last_diag_pub_time) > diag_pub_duration)
     {
       diag_array.status.clear();
       netft->diagnostics(diag_status);
@@ -158,10 +152,10 @@ int main(int argc, char **argv)
       ready_pub.publish(is_ready);
       last_diag_pub_time = current_time;
     }
-    
+
     ros::spinOnce();
     pub_rate.sleep();
   }
-  
+
   return 0;
 }
