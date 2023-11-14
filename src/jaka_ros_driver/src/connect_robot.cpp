@@ -1235,7 +1235,6 @@ void *ServoMove(void *args)
 
                     servo_pose_change_flag = false;
                     t = 0;
-                    cout << "change expected pose" << expected_pose_servo.transpose() << endl;
                 }
 
                 memcpy(tmp_expected_joint_servo.jVal, tra[t].data(), 6 * 8);

@@ -31,7 +31,7 @@ MatrixXd K(6, 6);
 VectorXd FTsensor_data(6);
 VectorXd FTdata_sum(6);
 queue<VectorXd> FTdata_list;
-long FTdata_num = 10;
+int FTdata_num = 10;
 
 VectorXd refer_pose(6);
 
@@ -188,17 +188,20 @@ int main(int argc, char **argv)
 
     pthread_mutex_init(&FTsensor_mutex, NULL);
 
-    ros::CallbackQueue param_queue;
-    n.setCallbackQueue(&param_queue);
+    // ros::CallbackQueue param_queue;
+    // n.setCallbackQueue(&param_queue);
 
-    ros::Subscriber camera_pose = n.subscribe<geometry_msgs::PoseStamped>("/aruco_single/pose", 10, ReferPoseCalculate);
+    // ros::Subscriber camera_pose = n.subscribe<geometry_msgs::PoseStamped>("/aruco_single/pose", 10, ReferPoseCalculate);
 
-    sleep(2);
+    // sleep(2);
 
-    param_queue.callOne(ros::WallDuration(1.0));
+    // param_queue.callOne(ros::WallDuration(1.0));
+
+    refer_pose << -0.702199, 0.0183965, 0.253432, 2.95717, 0.154995, 0.0520965;
 
 #pragma region /*基本参数定义*/
     double kcontrol_rate = 0.1;
+    int debug_flag[6];
 
     /* FTsensor CSalibration */
     VectorXd zero_drift_compensation(6);
@@ -207,11 +210,19 @@ int main(int argc, char **argv)
     Vector3d G_sensor = Vector3d::Zero(); // 传感器坐标系重力
     VectorXd gravity_compensation(6);
     VectorXd external_wrench_sensor(6);
+    VectorXd external_wrench_pegright(6);
+    VectorXd external_wrench_pegleft(6);
     Vector3d external_force_sensor = Vector3d::Zero();
     Vector3d external_torque_sensor = Vector3d::Zero();
+    Vector3d right_force;
+    Vector3d left_force;
+    double dy = 0.4;
+    double dz = 0.043;
 
     /* Admittance Computation */
     MatrixXd jacobian_sensor2peg(6, 6);
+    MatrixXd jacobian_sensor2pegright(6, 6);
+    MatrixXd jacobian_sensor2pegleft(6, 6);
     Matrix4d T_peg2tcp;
     VectorXd expected_wrench(6);
     VectorXd delta_wrench(6);
@@ -236,13 +247,13 @@ int main(int argc, char **argv)
     Vector3d delta_torque_abs = Vector3d::Zero();
 
     /* 状态切换 */
-    long reach_count = 0;
+    bool is_finite = false;
     int stage = 1; // 一阶段导纳控制单侧入孔、二阶段另一侧入孔判断及搜孔、三阶段导纳控制完成竖直装配，四阶段完成水平装配
+    int reach_count = 0;
     int search_stage = 1;
-    int step_count = 0;
-    bool is_finite = true;
+    long step_count = 0;
     int tra_num = 0;
-    long external_wrench_num = 10;
+    int external_wrench_num = 10;
     queue<VectorXd> external_wrench_list;
     Matrix4d T_pegright2base;
     Matrix4d T_pegright2tcp;
@@ -251,8 +262,8 @@ int main(int argc, char **argv)
     VectorXd change_wrench(6);
     VectorXd pre_change_wrench(6);
     VectorXd inspect_pose(6);
-    MatrixXd tra2start_pose(6, 300);
-    MatrixXd tra2inspected_pose(6, 300);
+    MatrixXd tra2start_pose(6, 20000);
+    MatrixXd tra2inspected_pose(6, 200);
 
     robot_msgs::ServoL servo_msg;
 
@@ -266,8 +277,8 @@ int main(int argc, char **argv)
     D = MatrixXd::Identity(6, 6);
     K = MatrixXd::Identity(6, 6);
 
-    double M_array[6] = {500, 500, 500, 5, 5, 5};
-    double D_array[6] = {250, 250, 250, 5, 5, 5};
+    double M_array[6] = {500, 500, 500, 7.5, 5, 15};
+    double D_array[6] = {250, 250, 250, 7.5, 5, 15};
     double K_array[6] = {0, 0, 0, 0, 0, 0};
 
     for (int i = 0; i < 6; i++)
@@ -291,13 +302,28 @@ int main(int argc, char **argv)
     jacobian_sensor2peg(3, 1) = 43 / 1000.0;
     jacobian_sensor2peg(4, 0) = -43 / 1000.0;
 
+    jacobian_sensor2pegright = MatrixXd::Identity(6, 6);
+    jacobian_sensor2pegright(3, 1) = 43 / 1000.0;
+    jacobian_sensor2pegright(3, 2) = 0.4;
+    jacobian_sensor2pegright(4, 0) = -43 / 1000.0;
+    jacobian_sensor2pegright(5, 0) = -0.4;
+
+    jacobian_sensor2pegleft = MatrixXd::Identity(6, 6);
+    jacobian_sensor2pegleft(3, 1) = 43 / 1000.0;
+    jacobian_sensor2pegleft(3, 2) = -0.4;
+    jacobian_sensor2pegleft(4, 0) = -43 / 1000.0;
+    jacobian_sensor2pegleft(5, 0) = 0.4;
+
+    right_force = Vector3d::Zero();
+    left_force = Vector3d::Zero();
+
     /* Admittance Computation */
     T_pegright2tcp = Matrix4d::Identity();
     T_pegright2tcp(2, 3) = 111.6 / 1000.0;
     T_pegright2tcp(1, 3) = 0.4;
     T_peg2tcp = Matrix4d::Identity();
     T_peg2tcp(2, 3) = 111.6 / 1000.0;
-    expected_wrench << -20, 20, -50, 0, 0, 0;
+    expected_wrench << -20, 20, -40, 0, 0, 0;
     expected_pose = refer_pose;
     T_pre = Pose2HomogeneousTransform(expected_pose);
     pre_delta_pose = VectorXd::Zero(6);
@@ -385,13 +411,24 @@ int main(int argc, char **argv)
         if (external_wrench_list.size() > external_wrench_num)
             external_wrench_list.pop();
 
+        right_force(0) = 0.5 * (external_wrench_sensor(5) / dy + external_wrench_sensor(0));
+        left_force(0) = 0.5 * (external_wrench_sensor(0) - external_wrench_sensor(5) / dy);
+        right_force(1) = external_wrench_sensor(1);
+        left_force(1) = 0;
+        right_force(2) = 0.5 * (external_wrench_sensor(2) - (external_wrench_sensor(3) + external_wrench_sensor(1) * dz) / dy);
+        left_force(2) = 0.5 * ((external_wrench_sensor(3) + external_wrench_sensor(1) * dz) / dy + external_wrench_sensor(2));
+
         /* 计算工件坐标系下deltaF */
-        delta_wrench = jacobian_sensor2peg * (external_wrench_sensor - expected_wrench);
+        delta_wrench = external_wrench_sensor - expected_wrench;
+        delta_wrench = jacobian_sensor2peg * delta_wrench;
 
         delta_force = delta_wrench.block<3, 1>(0, 0);
         delta_force_abs = delta_force.array().abs();
         delta_torque = delta_wrench.block<3, 1>(3, 0);
         delta_torque_abs = delta_torque.array().abs();
+
+        // if (search_stage == 3)
+        //     delta_wrench(5) = 0;
 
         /* 计算xt,dotxt,dotdotxt */
         T_pre = T_pre * T_peg2tcp;
@@ -410,21 +447,32 @@ int main(int argc, char **argv)
         expected_pose = HomogeneousTransform2Pose(T_expected);
 
         /* 数据观测 */
+        external_wrench_pegright = jacobian_sensor2pegright * external_wrench_sensor;
+        external_wrench_pegleft = jacobian_sensor2pegleft * external_wrench_sensor;
+
         for (int i = 0; i < 6; i++)
         {
             plot_data.data[i + 6] = expected_pose[i];
             plot_data.data[i + 12] = external_wrench_sensor[i];
             plot_data.data[i + 18] = delta_pose[i];
+            plot_data.data[i + 32] = external_wrench_pegright[i];
+            plot_data.data[i + 38] = external_wrench_pegleft[i];
+            plot_data.data[i + 58] = debug_flag[i];
         }
-
-        if (expected_pose(3) > 0)
-            plot_data.data[3] = plot_data.data[3] - 2 * PI;
+        for (int i = 0; i < 3; i++)
+        {
+            plot_data.data[i + 26] = right_force[i];
+            plot_data.data[i + 29] = left_force[i];
+        } // if (search_stage == 3)
+        //     delta_wrench(5) = 0;
+        plot_data.data[25] = search_stage;
 
         /* 运动切换 */
         switch (stage)
         {
         case 1:
-            if (delta_force_abs.maxCoeff() < 5 && delta_torque(0) < 1.0)
+            if (delta_force_abs.maxCoeff() < 5 && delta_torque(0) < 1.0 && delta_torque_abs(1) < 0.2)
+            // if (delta_force_abs.maxCoeff() < 5 && delta_torque(0) < 1.0)
             {
                 if (reach_count <= 10)
                     reach_count++;
@@ -435,8 +483,15 @@ int main(int argc, char **argv)
                     stage = 2;
                     start_pose = expected_pose;
                     tra2start_pose.block<6, 1>(0, 0) = expected_pose;
-                    expected_wrench << 0, 0, -20, 0, 0, 0;
+                    expected_wrench << 0, 0, -40, 0, 0, 0;
                     reach_count = 0;
+
+                    if (is_finite)
+                        search_stage = 0;
+                    else
+                        search_stage = 3;
+
+                    debug_flag[0] = 1;
                 }
             }
             else
@@ -445,80 +500,37 @@ int main(int argc, char **argv)
             break;
 
         case 2:
-            /* 入孔状态判断 */
-            T_pegright2base = T_expected * T_pegright2tcp;
-
-            switch (search_stage)
+            /* 入孔 */
+            if (is_finite)
             {
-            case 0: // 区分孔内孔外
-                break;
-            case 1: // 顺时针搜索
-                if (step_count < 200 && abs(external_wrench_sensor(2) - external_wrench_list.front()(2)) < 15)
-                {
-                    T_expected = Matrix4d::Identity();
-                    R_calc = AngleAxisd(0.1 / 180 * PI, Vector3d::UnitZ());
-                    T_expected.block<3, 3>(0, 0) = R_calc;
-                    T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
-                    expected_pose = HomogeneousTransform2Pose(T_expected);
-                    tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+                T_pegright2base = T_expected * T_pegright2tcp;
 
-                    step_count = step_count + 1;
-                }
-                else if (abs(pre_change_wrench(2) + change_wrench(2)) > 6)
+                switch (search_stage)
                 {
-                    if (is_finite)
-                        search_stage = 2;
-                    else
+                case 0: // 区分孔内孔外
+                    break;
+                case 1: // 顺时针搜索
+                    if (step_count < 200 && abs(external_wrench_sensor(2) - external_wrench_list.front()(2)) < 15)
                     {
-                        stage = 3;
-                        expected_wrench << 0, 10, -50, 0, 0, 0;
-                        step_count = 0;
-                    }
-                }
-                else
-                {
-                    expected_pose = tra2start_pose.block<6, 1>(0, step_count - tra_num - 1);
-
-                    tra_num = tra_num + 1;
-
-                    if (tra_num >= step_count)
-                    {
-                        search_stage = 3;
-                        step_count = 0;
-                        tra_num = 0;
-                    }
-                }
-
-                break;
-
-            case 2:                   // 顺时针确认
-                if (step_count < 205) // 下降一段距离
-                {
-                    inspect_pose = expected_pose;
-                    tra2inspected_pose.block<6, 1>(0, 0) = inspect_pose;
-                    tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
-                    step_count = step_count + 1;
-                }
-                else
-                {
-                    if (step_count < 220)
-                    {
-                        T_pegright2base = T_current * T_pegright2tcp; // 加导纳还是不加需要实验
                         T_expected = Matrix4d::Identity();
                         R_calc = AngleAxisd(0.1 / 180 * PI, Vector3d::UnitZ());
                         T_expected.block<3, 3>(0, 0) = R_calc;
                         T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
                         expected_pose = HomogeneousTransform2Pose(T_expected);
-
-                        tra2inspected_pose.block<6, 1>(0, step_count - 204) = expected_pose;
                         tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
 
                         step_count = step_count + 1;
-
-                        if (abs(pre_change_wrench(0) + change_wrench(0)) > 6 ||
-                            abs(pre_change_wrench(1) + change_wrench(1)) > 6 ||
-                            abs(pre_change_wrench(2) + change_wrench(2)) > 6) // 检测碰撞
-                            search_stage = 5;
+                    }
+                    else if (abs(pre_change_wrench(2) + change_wrench(2)) > 6)
+                    {
+                        if (is_finite)
+                            search_stage = 2;
+                        else
+                        {
+                            stage = 3;
+                            expected_wrench << 0, 10, -50, 0, 0, 0;
+                            step_count = 0;
+                        }
                     }
                     else
                     {
@@ -533,93 +545,211 @@ int main(int argc, char **argv)
                             tra_num = 0;
                         }
                     }
-                }
 
-                break;
+                    break;
 
-            case 3: // 逆时针搜索
-                if (step_count < 200 && abs(pre_change_wrench(2) + change_wrench(2)) < 6)
-                {
-                    T_expected = Matrix4d::Identity();
-                    R_calc = AngleAxisd(-0.1 / 180 * PI, Vector3d::UnitZ());
-                    T_expected.block<3, 3>(0, 0) = R_calc;
-                    T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
-                    expected_pose = HomogeneousTransform2Pose(T_expected);
-                    tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
-
-                    step_count = step_count + 1;
-                }
-                else if (abs(pre_change_wrench(2) + change_wrench(2)) > 6)
-                {
-                    if (is_finite)
-                        search_stage = 4;
+                case 2:                   // 顺时针确认
+                    if (step_count < 205) // 下降一段距离
+                    {
+                        inspect_pose = expected_pose;
+                        tra2inspected_pose.block<6, 1>(0, 0) = inspect_pose;
+                        tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+                        step_count = step_count + 1;
+                    }
                     else
                     {
-                        stage = 3;
-                        expected_wrench << 0, 10, -50, 0, 0, 0;
-                        step_count = 0;
+                        if (step_count < 220)
+                        {
+                            T_pegright2base = T_current * T_pegright2tcp; // 加导纳还是不加需要实验
+                            T_expected = Matrix4d::Identity();
+                            R_calc = AngleAxisd(0.1 / 180 * PI, Vector3d::UnitZ());
+                            T_expected.block<3, 3>(0, 0) = R_calc;
+                            T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
+                            expected_pose = HomogeneousTransform2Pose(T_expected);
+
+                            tra2inspected_pose.block<6, 1>(0, step_count - 204) = expected_pose;
+                            tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+
+                            step_count = step_count + 1;
+
+                            if (abs(pre_change_wrench(0) + change_wrench(0)) > 6 ||
+                                abs(pre_change_wrench(1) + change_wrench(1)) > 6 ||
+                                abs(pre_change_wrench(2) + change_wrench(2)) > 6) // 检测碰撞
+                                search_stage = 5;
+                        }
+                        else
+                        {
+                            expected_pose = tra2start_pose.block<6, 1>(0, step_count - tra_num - 1);
+
+                            tra_num = tra_num + 1;
+
+                            if (tra_num >= step_count)
+                            {
+                                search_stage = 3;
+                                step_count = 0;
+                                tra_num = 0;
+                            }
+                        }
                     }
-                }
-                else
-                    ROS_ERROR("Failed to Find the Hole");
 
-                break;
+                    break;
 
-            case 4:                   // 顺时针确认
-                if (step_count < 205) // 下降一段距离
-                {
-                    inspect_pose = expected_pose;
-                    tra2inspected_pose.block<6, 1>(0, 0) = inspect_pose;
-                    tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
-                    step_count = step_count + 1;
-                }
-                else
-                {
-                    if (step_count < 220)
+                case 3: // 逆时针搜索
+                    if (step_count < 200 && abs(pre_change_wrench(2) + change_wrench(2)) < 6)
                     {
-                        T_pegright2base = T_current * T_pegright2tcp; // 加导纳还是不加需要实验
                         T_expected = Matrix4d::Identity();
                         R_calc = AngleAxisd(-0.1 / 180 * PI, Vector3d::UnitZ());
                         T_expected.block<3, 3>(0, 0) = R_calc;
                         T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
                         expected_pose = HomogeneousTransform2Pose(T_expected);
-
-                        tra2inspected_pose.block<6, 1>(0, step_count - 204) = expected_pose;
                         tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
 
                         step_count = step_count + 1;
-
-                        if (abs(pre_change_wrench(0) + change_wrench(0)) > 6 ||
-                            abs(pre_change_wrench(1) + change_wrench(1)) > 6 ||
-                            abs(pre_change_wrench(2) + change_wrench(2)) > 6) // 检测碰撞
-                            search_stage = 5;
+                    }
+                    else if (abs(pre_change_wrench(2) + change_wrench(2)) > 6)
+                    {
+                        if (is_finite)
+                            search_stage = 4;
+                        else
+                        {
+                            stage = 3;
+                            expected_wrench << 0, 10, -50, 0, 0, 0;
+                            step_count = 0;
+                        }
                     }
                     else
                         ROS_ERROR("Failed to Find the Hole");
+
+                    break;
+
+                case 4:                   // 顺时针确认
+                    if (step_count < 205) // 下降一段距离
+                    {
+                        inspect_pose = expected_pose;
+                        tra2inspected_pose.block<6, 1>(0, 0) = inspect_pose;
+                        tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+                        step_count = step_count + 1;
+                    }
+                    else
+                    {
+                        if (step_count < 220)
+                        {
+                            T_pegright2base = T_current * T_pegright2tcp; // 加导纳还是不加需要实验
+                            T_expected = Matrix4d::Identity();
+                            R_calc = AngleAxisd(-0.1 / 180 * PI, Vector3d::UnitZ());
+                            T_expected.block<3, 3>(0, 0) = R_calc;
+                            T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
+                            expected_pose = HomogeneousTransform2Pose(T_expected);
+
+                            tra2inspected_pose.block<6, 1>(0, step_count - 204) = expected_pose;
+                            tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+
+                            step_count = step_count + 1;
+
+                            if (abs(pre_change_wrench(0) + change_wrench(0)) > 6 ||
+                                abs(pre_change_wrench(1) + change_wrench(1)) > 6 ||
+                                abs(pre_change_wrench(2) + change_wrench(2)) > 6) // 检测碰撞
+                                search_stage = 5;
+                        }
+                        else
+                            ROS_ERROR("Failed to Find the Hole");
+                    }
+
+                    break;
+
+                case 5: // return to inspected pose
+                    expected_pose = tra2inspected_pose.block<6, 1>(0, step_count - 206 - tra_num);
+
+                    tra_num = tra_num + 1;
+
+                    if (tra_num >= step_count - 205)
+                    {
+                        stage = 3;
+                        expected_wrench << 0, 10, -50, 0, 0, 0;
+                        step_count = 0;
+                        tra_num = 0;
+                    }
+                    break;
                 }
+            }
+            else
+            {
+                T_pegright2base = T_expected * T_pegright2tcp;
 
-                break;
-
-            case 5: // return to inspected pose
-                expected_pose = tra2inspected_pose.block<6, 1>(0, step_count - 206 - tra_num);
-
-                tra_num = tra_num + 1;
-
-                if (tra_num >= step_count - 205)
+                switch (search_stage)
                 {
-                    stage = 3;
-                    expected_wrench << 0, 10, -50, 0, 0, 0;
-                    step_count = 0;
-                    tra_num = 0;
+                case 1: // 顺时针搜索
+                    if (step_count < 20000 && abs(external_wrench_sensor(5)) < 10)
+                    {
+                        T_expected = Matrix4d::Identity();
+                        R_calc = AngleAxisd(0.1 / 180 * PI, Vector3d::UnitZ());
+                        T_expected.block<3, 3>(0, 0) = R_calc;
+                        T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
+                        expected_pose = HomogeneousTransform2Pose(T_expected);
+                        tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+
+                        step_count = step_count + 1;
+                    }
+                    else if (abs(external_wrench_sensor(5)) >= 10)
+                    {
+                        stage = 3;
+                        expected_wrench << 0, 10, -50, 0, 0, 0;
+                        step_count = 0;
+                    }
+                    else
+                    {
+                        expected_pose = tra2start_pose.block<6, 1>(0, step_count - tra_num - 1);
+
+                        tra_num = tra_num + 1;
+
+                        if (tra_num >= step_count)
+                        {
+                            search_stage = 3;
+                            step_count = 0;
+                            tra_num = 0;
+                        }
+                    }
+
+                    break;
+
+                case 3: // 逆时针搜索
+                    // if (step_count < 20000 && abs(external_wrench_sensor(5)) < 10)
+                    if (abs(external_wrench_sensor(4)) < 4)
+                    {
+                        if (delta_force(2) < 5 && delta_torque(0) < 1.0)
+                        {
+                            T_expected = Matrix4d::Identity();
+                            R_calc = AngleAxisd(-0.1 / 180 * PI, Vector3d::UnitZ());
+                            T_expected.block<3, 3>(0, 0) = R_calc;
+                            T_expected = T_pegright2base * T_expected * T_pegright2tcp.inverse();
+                            expected_pose = HomogeneousTransform2Pose(T_expected);
+                            tra2start_pose.block<6, 1>(0, step_count + 1) = expected_pose;
+                            debug_flag[0] = 2;
+                        }
+                        else
+                        {
+                            debug_flag[0] = 1;
+                        }
+                        // step_count = step_count + 1;
+                    }
+                    else if (abs(external_wrench_sensor(4)) >= 4)
+                    {
+                        stage = 3;
+                        expected_wrench << 0, 10, -40, 0, 0, 0;
+                        step_count = 0;
+                    }
+                    else
+                        ROS_ERROR("Failed to Find the Hole");
+
+                    break;
                 }
-                break;
             }
 
             break;
 
         case 3:
 
-            if (delta_force(2) < 0 && delta_torque.maxCoeff() < 0.2)
+            if (delta_force_abs.maxCoeff() < 5 && delta_torque(0) < 0.2)
             {
                 if (reach_count <= 10)
                     reach_count++;
@@ -628,8 +758,6 @@ int main(int argc, char **argv)
                     stage = 4;
                     reach_count = 0;
                     expected_wrench << 0, -40, -5, 0, 0, 0;
-                    pose_referrance << -0.698439031234, 0.00107985579317, 0.138448071114, -PI, 0.0, 0.0;
-                    pose_limitation << 0.005, 0.11, 0.009, 3.0 / 180 * PI, 3.0 / 180 * PI, 5.0 / 180 * PI;
                 }
             }
             else
@@ -679,6 +807,7 @@ int main(int argc, char **argv)
 
         rate.sleep();
     }
+
     servo_msg.servo_mode = false;
     servo_move_pub.publish(servo_msg);
 
