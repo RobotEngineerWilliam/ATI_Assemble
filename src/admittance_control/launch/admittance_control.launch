@@ -1,7 +1,4 @@
 <launch>
-    <include file="$(find realsense2_camera)/launch/rs_camera.launch"/>
-    <include file="$(find aruco_ros)/launch/single.launch"/>
-    <node pkg="image_view" type="image_view" name="image_view" respawn="false" output="screen" args="/aruco_single/result"/>
     <node pkg="jaka_ros_driver" type="connect_robot" name="connect_robot" output="screen" />
     <node pkg="netft_utils" type="netft_node" name="netft_node" respawn="false" output="screen" args="192.168.50.168"/>
     <node pkg="admittance_control" type="MDK_computation" name="MDK_computation" output="screen" />

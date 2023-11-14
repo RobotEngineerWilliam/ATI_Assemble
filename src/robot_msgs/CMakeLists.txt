@@ -54,6 +54,7 @@ add_message_files(
 #   Message1.msg
    RobotMsg.msg
    ServoL.msg
+   JointTorque.msg
  )
 
 ## Generate services in the 'srv' folder

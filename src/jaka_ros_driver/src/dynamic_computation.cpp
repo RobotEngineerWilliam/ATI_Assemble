@@ -1,4 +1,4 @@
-#include "dynamic_model.h"
+#include "dynamic_computation.h"
 
 using namespace std;
 using namespace Eigen;
@@ -228,6 +228,7 @@ MatrixXd JacobianMatrixComputation(MatrixXd MDH)
     }
 
     jacobi_joint2tool = MatrixXd::Zero(6, 6);
+
     for (int i = 1; i < 6; i++)
     {
         homogeneous_transform_element = homogeneous_transform(5, i);

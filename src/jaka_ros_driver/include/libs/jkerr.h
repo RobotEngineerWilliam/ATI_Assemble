@@ -1,3 +1,7 @@
+/**
+ * encoding: gb2312
+ */
+
 #ifndef _JHERR_H_
 #define _JHERR_H_
 
@@ -15,5 +19,5 @@
 #define ERR_PROGRAM_IS_RUNNING   -10            //程序正在运行，不允许操作
 #define ERR_CANNOT_OPEN_FILE     -11            //无法打开文件，文件不存在
 #define ERR_MOTION_ABNORMAL      -12            //运动过程中发生异常
-
+#define ERR_FTP_PREFROM			 -14            //ftp异常
 #endif

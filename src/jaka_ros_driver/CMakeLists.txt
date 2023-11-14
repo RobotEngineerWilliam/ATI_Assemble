@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
    std_msgs
    message_generation
    std_srvs
-   robot_msgs
+   robot_msgs 
 )
 
 ## System dependencies are found with CMake's conventions
@@ -134,6 +134,14 @@ include_directories(
    include/libs
    src
 )
+
+add_library(Dynamic_Computation
+  include/dynamic_computation.h
+  src/dynamic_computation.cpp
+)
+
+add_dependencies(Dynamic_Computation ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(Dynamic_Computation ${catkin_LIBRARIES})
 
 ## Declare a C++ library
 #        add_library(${PROJECT_NAME}
@@ -294,7 +302,7 @@ include_directories(
 # add_dependencies(disconnect_robot ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_executable(connect_robot src/connect_robot.cpp)
-target_link_libraries(connect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so)
+target_link_libraries(connect_robot ${catkin_LIBRARIES} ${PROJECT_SOURCE_DIR}/include/libs/libjakaAPI.so Dynamic_Computation)
 add_dependencies(connect_robot ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_definitions("-Wall -g") 

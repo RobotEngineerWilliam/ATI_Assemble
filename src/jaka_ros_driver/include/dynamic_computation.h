@@ -1,5 +1,5 @@
-#ifndef DYNAMIC_MODEL_H
-#define DYNAMIC_MODEL_H
+#ifndef DYNAMIC_COMPUTATION_H
+#define DYNAMIC_COMPUTATION_H
 
 #include <cmath>
 #include "std_msgs/String.h"

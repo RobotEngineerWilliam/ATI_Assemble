@@ -12,10 +12,11 @@
 #include "std_srvs/Empty.h"
 #include "std_srvs/SetBool.h"
 #include "robot_msgs/RobotMsg.h"
+#include "robot_msgs/ServoL.h"
+#include "robot_msgs/JointTorque.h"
 #include "robot_msgs/SetUserFrame.h"
 #include "robot_msgs/SetTcp.h"
 #include "robot_msgs/SetLoad.h"
-#include "robot_msgs/ServoL.h"
 #include "robot_msgs/ClearErr.h"
 #include "robot_msgs/SetCollision.h"
 #include "robot_msgs/SetAxis.h"
@@ -26,6 +27,8 @@
 #include "sensor_msgs/JointState.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/TwistStamped.h"
+#include "geometry_msgs/Wrench.h"
+#include "geometry_msgs/WrenchStamped.h"
 
 #include <pthread.h>
 #include <unistd.h>
@@ -35,6 +38,7 @@
 
 #include "libs/robot.h"
 #include "libs/conversion.h"
+#include "dynamic_computation.h"
 #include "time.h"
 #include <map>
 #include <string>
@@ -1003,12 +1007,32 @@ void *RobotStatePublish(void *args)
     // 2.3 robot state publisher -
     // ros::Publisher robot_state_pub = n.advertise<robot_msgs::RobotMsg>("/robot_driver/robot_states", 10);
 
+    // 2.4 robot joint torque publisher -
+    ros::Publisher joint_torque_pub = n->advertise<robot_msgs::JointTorque>("/robot_driver/joint_torque", 1);
+
+    // 2.5 robot contact torque publisher -
+    ros::Publisher contact_torque_pub = n->advertise<robot_msgs::JointTorque>("/robot_driver/contact_torque", 1);
+
+    // 2.6 robot contact wrench publisher -
+    ros::Publisher contact_wrench_pub = n->advertise<geometry_msgs::WrenchStamped>("/robot_driver/contact_wrench", 1);
+
+    MatrixXd MDH(6, 4);
+    MatrixXd jacobian(6, 6);
+    VectorXd contact_torque_comput(6);
+    VectorXd contact_wrench_comput(6);
+
     ros::Rate rate(100);
     while (ros::ok())
     {
         geometry_msgs::TwistStamped tool_point;
 
         sensor_msgs::JointState joint_states;
+
+        robot_msgs::JointTorque joint_torque;
+
+        robot_msgs::JointTorque contact_torque;
+
+        geometry_msgs::WrenchStamped contact_wrench;
 
         RobotStatus robot_status;
 
@@ -1037,10 +1061,37 @@ void *RobotStatePublish(void *args)
             joint_states.position.push_back(robot_status.joint_position[i]); // write data into standard ros msg
             joint_states.name.push_back("joint_" + std::to_string(i + 1));
             joint_states.header.stamp = ros::Time::now();
+
+            joint_torque.torque[i] = robot_status.torq_sensor_monitor_data.actTorque[i];
+            contact_torque.torque[i] = robot_status.torq_sensor_monitor_data.torque[i];
+            contact_torque_comput(i) = robot_status.torq_sensor_monitor_data.torque[i];
         }
+
+        MDH << 0.00000, 0.11987, robot_status.joint_position[0], -0.13 / 180 * PI,
+            0.00000, 0.00000, robot_status.joint_position[1], 90.00 / 180 * PI,
+            0.55524, 0.00000, robot_status.joint_position[2], 0.28 / 180 * PI,
+            0.48228, -0.11533, robot_status.joint_position[3], 0.08 / 180 * PI,
+            0.00000, 0.11323, robot_status.joint_position[4], 90.01 / 180 * PI,
+            0.00000, 0.10717, robot_status.joint_position[5], -89.83 / 180 * PI;
+
+        jacobian = JacobianMatrixComputation(MDH);
+
+        jacobian = jacobian.inverse();
+
+        contact_wrench_comput = jacobian * contact_torque_comput;
+
+        contact_wrench.wrench.force.x = contact_wrench_comput[0];
+        contact_wrench.wrench.force.y = contact_wrench_comput[1];
+        contact_wrench.wrench.force.z = contact_wrench_comput[2];
+        contact_wrench.wrench.torque.x = contact_wrench_comput[3];
+        contact_wrench.wrench.torque.y = contact_wrench_comput[4];
+        contact_wrench.wrench.torque.z = contact_wrench_comput[5];
 
         tool_point_pub.publish(tool_point);
         joint_states_pub.publish(joint_states); // publish data
+        joint_torque_pub.publish(joint_torque);
+        contact_torque_pub.publish(contact_torque);
+        contact_wrench_pub.publish(contact_wrench);
 
         memcpy(current_joint_servo.data(), robot_status.joint_position, 6 * 8);
 
@@ -1235,7 +1286,6 @@ void *ServoMove(void *args)
 
                     servo_pose_change_flag = false;
                     t = 0;
-                    cout << "change expected pose" << expected_pose_servo.transpose() << endl;
                 }
 
                 memcpy(tmp_expected_joint_servo.jVal, tra[t].data(), 6 * 8);
@@ -1334,15 +1384,19 @@ int main(int argc, char **argv)
     robot.login_in(ip.c_str());
     sleep(1);
     robot.power_on();
-    sleep(1);
+    sleep(5);
     robot.enable_robot();
+    sleep(5);
     robot.get_robot_status(&ret_status);
     if (ret_status.enabled == false)
         ROS_INFO("Robot:%s failed", ip.c_str());
+    else
+        ROS_INFO("Robot:%s enable", ip.c_str());
 
-    ROS_INFO("Robot:%s enable", ip.c_str());
     ros::Duration(1).sleep();
     ROS_INFO("Robot:%s ready!", ip.c_str());
+
+    robot.set_collision_level(0);
 
     // pthread_t tids_1;
     // pthread_create(&tids_1, NULL, PlotData, &n);
@@ -1362,6 +1416,10 @@ int main(int argc, char **argv)
     std::cout << "shut down" << std::endl;
 
     pthread_mutex_lock(&robot_mutex);
+    robot.disable_robot();
+    sleep(1);
+    robot.power_off();
+    sleep(1);
     int ret = robot.login_out();
     cout << ret << endl;
     pthread_mutex_unlock(&robot_mutex);

@@ -86,7 +86,12 @@
         "lu": "cpp",
         "qr": "cpp",
         "svd": "cpp",
-        "stdvector": "cpp"
+        "stdvector": "cpp",
+        "regex": "cpp",
+        "shared_mutex": "cpp",
+        "valarray": "cpp",
+        "variant": "cpp",
+        "bit": "cpp"
     },
     "[python]": {
         "editor.defaultFormatter": "ms-python.autopep8"
