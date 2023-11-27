@@ -16,6 +16,7 @@
 #include "robot_msgs/GetPosition.h"
 #include "admittance_control/MDK_msg.h"
 #include "admittance_control/Plot.h"
+#include "robotiq_ft_sensor/ft_sensor.h"
 
 using namespace std;
 using namespace Eigen;
@@ -31,7 +32,7 @@ MatrixXd K(6, 6);
 VectorXd FTsensor_data(6);
 VectorXd FTdata_sum(6);
 queue<VectorXd> FTdata_list;
-int FTdata_num = 10;
+int FTdata_num = 20;
 
 VectorXd refer_pose(6);
 
@@ -86,16 +87,42 @@ static VectorXd HomogeneousTransform2Pose(Matrix4d T)
     return pose;
 }
 
-void ForceRecord(const geometry_msgs::WrenchStamped::ConstPtr &msg)
+// void ForceRecord(const geometry_msgs::WrenchStamped::ConstPtr &msg)
+// {
+//     VectorXd FTdata_once(6);
+
+//     FTdata_once(0) = msg->wrench.force.x;
+//     FTdata_once(1) = msg->wrench.force.y;
+//     FTdata_once(2) = msg->wrench.force.z;
+//     FTdata_once(3) = msg->wrench.torque.x;
+//     FTdata_once(4) = msg->wrench.torque.y;
+//     FTdata_once(5) = msg->wrench.torque.z;
+
+//     FTdata_list.push(FTdata_once);
+
+//     if (FTdata_list.size() > FTdata_num)
+//     {
+//         FTdata_sum = FTdata_sum - FTdata_list.front() + FTdata_once;
+//         FTdata_list.pop();
+//     }
+//     else
+//         FTdata_sum = FTdata_sum + FTdata_once;
+
+//     pthread_mutex_lock(&FTsensor_mutex);
+//     FTsensor_data = FTdata_sum / FTdata_list.size();
+//     pthread_mutex_unlock(&FTsensor_mutex);
+// }
+
+void ForceRecord(const robotiq_ft_sensor::ft_sensor::ConstPtr &msg)
 {
     VectorXd FTdata_once(6);
 
-    FTdata_once(0) = msg->wrench.force.x;
-    FTdata_once(1) = msg->wrench.force.y;
-    FTdata_once(2) = msg->wrench.force.z;
-    FTdata_once(3) = msg->wrench.torque.x;
-    FTdata_once(4) = msg->wrench.torque.y;
-    FTdata_once(5) = msg->wrench.torque.z;
+    FTdata_once(0, 0) = msg->Fx;
+    FTdata_once(1, 0) = msg->Fy;
+    FTdata_once(2, 0) = msg->Fz;
+    FTdata_once(3, 0) = msg->Mx;
+    FTdata_once(4, 0) = msg->My;
+    FTdata_once(5, 0) = msg->Mz;
 
     FTdata_list.push(FTdata_once);
 
@@ -174,7 +201,8 @@ void *FTsensorFilter(void *args)
 
     ros::Subscriber MDK_sub = n_param.subscribe<admittance_control::MDK_msg>("/MDK", 1, &MDKRecord);
     // 如何初始化MDK参数即先收到一次topic
-    ros::Subscriber FTsensor_sub = n_param.subscribe<geometry_msgs::WrenchStamped>("netft_data", 1, &ForceRecord);
+    // ros::Subscriber FTsensor_sub = n_param.subscribe<geometry_msgs::WrenchStamped>("netft_data", 1, &ForceRecord);
+    ros::Subscriber FTsensor_sub = n_param.subscribe("robotiq_ft_sensor", 1, ForceRecord);
 
     FTdata_sum = VectorXd::Zero(6);
 
@@ -188,6 +216,7 @@ int main(int argc, char **argv)
 
     pthread_mutex_init(&FTsensor_mutex, NULL);
 
+    // 视觉获取参考位置
     // ros::CallbackQueue param_queue;
     // n.setCallbackQueue(&param_queue);
 
@@ -197,7 +226,7 @@ int main(int argc, char **argv)
 
     // param_queue.callOne(ros::WallDuration(1.0));
 
-    refer_pose << -0.702199, 0.0183965, 0.253432, 2.95717, 0.154995, 0.0520965;
+    refer_pose << -0.702199, 0.0183965, 0.253432, 2.95717, 0.154995, 0.0520965 + PI / 4;
 
 #pragma region /*基本参数定义*/
     double kcontrol_rate = 0.1;
@@ -286,22 +315,39 @@ int main(int argc, char **argv)
     cout << "K修改为:" << K << endl;
 
     /* FTsensor Calibration */
-    zero_drift_compensation << 4.06633, -7.25314, 1.23989, -0.222437, -0.0624568, -0.0484308;
-    centroid_sensor << 0.000828154, -0.00069389, 0.00449266;
-    G_basis << 0.0, 0.0, -19.0436;
+    // ATI parameter
+    // zero_drift_compensation << 4.06633, -7.25314, 1.23989, -0.222437, -0.0624568, -0.0484308;
+    // centroid_sensor << 0.000828154, -0.00069389, 0.00449266;
+    // G_basis << 0.0, 0.0, -19.0436;
+    // jacobian_sensor2peg = MatrixXd::Identity(6, 6);
+    // jacobian_sensor2peg(3, 1) = 35 / 1000.0;
+    // jacobian_sensor2peg(4, 0) = -35 / 1000.0;
+    // Robotiq parameter
+    zero_drift_compensation << -1.58287, 14.5411, 85.3395, 0.469789, -0.417352, -0.0881487;
+    centroid_sensor << -0.000353546, -0.000902515, 0.00677097;
+    G_basis << 0.0, 0.0, -17.4475;
+    jacobian_sensor2peg = MatrixXd::Identity(6, 6);
+    jacobian_sensor2peg(3, 1) = 37.5 / 1000.0;
+    jacobian_sensor2peg(4, 0) = -37.5 / 1000.0;
+
     FTsensor_data = VectorXd::Zero(6);
     gravity_compensation = VectorXd::Zero(6);
     external_wrench_sensor = VectorXd::Zero(6);
-    jacobian_sensor2peg = MatrixXd::Identity(6, 6);
-    jacobian_sensor2peg(3, 1) = 35 / 1000.0;
-    jacobian_sensor2peg(4, 0) = -35 / 1000.0;
 
     /* Admittance Computation */
+    // ATI parameter
+    // T_pegright2tcp = Matrix4d::Identity();
+    // T_pegright2tcp(2, 3) = 103.6 / 1000.0;
+    // T_pegright2tcp(1, 3) = 0.4;
+    // T_peg2tcp = Matrix4d::Identity();
+    // T_peg2tcp(2, 3) = 103.6 / 1000.0;
+    // Robotiq parameter
     T_pegright2tcp = Matrix4d::Identity();
-    T_pegright2tcp(2, 3) = 103.6 / 1000.0;
+    T_pegright2tcp(2, 3) = 106.1 / 1000.0;
     T_pegright2tcp(1, 3) = 0.4;
     T_peg2tcp = Matrix4d::Identity();
-    T_peg2tcp(2, 3) = 103.6 / 1000.0;
+    T_peg2tcp(2, 3) = 106.1 / 1000.0;
+
     expected_wrench << -20, 20, -40, 0, 0, 0;
     expected_pose = refer_pose;
     T_pre = Pose2HomogeneousTransform(expected_pose);
@@ -313,7 +359,7 @@ int main(int argc, char **argv)
 
     /* Protection */
     pose_limitation << 0.02, 0.02, 0.3, 15.0 / 180 * PI, 15.0 / 180 * PI, 5.0 / 180 * PI;
-    pose_referrance << -0.707, 0.023, 0.2, -PI, 0.0, 0.0;
+    pose_referrance << -0.707, 0.023, 0.2, -PI, 0.0, PI / 4;
     pre_change_wrench = VectorXd::Zero(6);
 
     pthread_t tids_1;
@@ -363,7 +409,8 @@ int main(int argc, char **argv)
             current_postion << srv_get_position.response.position[0], srv_get_position.response.position[1], srv_get_position.response.position[2];
             rotation_basis2end = AngleAxisd(srv_get_position.response.position[5], Vector3d::UnitZ()) *
                                  AngleAxisd(srv_get_position.response.position[4], Vector3d::UnitY()) *
-                                 AngleAxisd(srv_get_position.response.position[3], Vector3d::UnitX());
+                                 AngleAxisd(srv_get_position.response.position[3], Vector3d::UnitX()) *
+                                 AngleAxisd(PI / 4, Vector3d::UnitZ());
             T_current = Matrix4d::Identity();
             T_current.block<3, 3>(0, 0) = rotation_basis2end;
             T_current.block<3, 1>(0, 3) = current_postion;
@@ -773,10 +820,13 @@ int main(int argc, char **argv)
 
         plot_pub.publish(plot_data);
 
-        // servo_msg.servo_mode = true;
-        // for (int i = 0; i < 6; i++)
-        //     servo_msg.pose[i] = expected_pose(i);
-        // servo_move_pub.publish(servo_msg);
+        // 将虚拟TCP位置旋转45度发给机械臂
+        T_expected = Pose2HomogeneousTransform(expected_pose);
+        T_expected = T_expected * AngleAxisd(-PI / 4, Vector3d::UnitZ());
+        //  servo_msg.servo_mode = true;
+        //  for (int i = 0; i < 6; i++)
+        //      servo_msg.pose[i] = expected_pose(i);
+        //  servo_move_pub.publish(servo_msg);
 
         rate.sleep();
     }
