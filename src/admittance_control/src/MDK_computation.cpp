@@ -132,8 +132,8 @@ int main(int argc, char **argv)
     D = MatrixXd::Identity(6, 6);
     K = MatrixXd::Identity(6, 6);
 
-    double M_array[6] = {500, 500, 500, 5, 5, 5};
-    double D_array[6] = {250, 250, 250, 5, 5, 5};
+    double M_array[6] = {500, 500, 500, 7.5, 5, 30};
+    double D_array[6] = {4000, 4000, 4000, 7.5, 5, 30};
     double K_array[6] = {0, 0, 0, 0, 0, 0};
 
     for (int i = 0; i < 6; i++)

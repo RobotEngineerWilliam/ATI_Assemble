@@ -131,12 +131,12 @@ int main(int argc, char **argv)
                 ROS_ERROR("Failed to Get the Position");
                 return 1;
             }
-            F_measure(3 * i, 0) = FT_Sum(0, 0) / 10.0;
-            F_measure(3 * i + 1, 0) = FT_Sum(1, 0) / 10.0;
-            F_measure(3 * i + 2, 0) = FT_Sum(2, 0) / 10.0;
-            M_measure(3 * i, 0) = FT_Sum(3, 0) / 10.0;
-            M_measure(3 * i + 1, 0) = FT_Sum(4, 0) / 10.0;
-            M_measure(3 * i + 2, 0) = FT_Sum(5, 0) / 10.0;
+            F_measure(3 * i, 0) = FT_Sum(0, 0) / 20.0;
+            F_measure(3 * i + 1, 0) = FT_Sum(1, 0) / 20.0;
+            F_measure(3 * i + 2, 0) = FT_Sum(2, 0) / 20.0;
+            M_measure(3 * i, 0) = FT_Sum(3, 0) / 20.0;
+            M_measure(3 * i + 1, 0) = FT_Sum(4, 0) / 20.0;
+            M_measure(3 * i + 2, 0) = FT_Sum(5, 0) / 20.0;
             F_A(3 * i, 0) = Transform_End2Basis(2, 0);
             F_A(3 * i + 1, 0) = Transform_End2Basis(2, 1);
             F_A(3 * i + 2, 0) = Transform_End2Basis(2, 2);
